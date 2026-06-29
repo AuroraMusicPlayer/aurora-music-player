@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus, Play, Heart, Clock, Flame, Disc3, Mic2, Tag, FolderOpen } from "lucide-react";
+import { Plus, Play, Heart, Clock } from "lucide-react";
 import { usePlayer } from "@/store/player";
 import {
   byIds,
@@ -250,9 +250,3 @@ function QuickTile({
   );
 }
 
-// Re-export unused icons to keep imports tidy if referenced later.
-void Disc3;
-void Mic2;
-void Tag;
-void FolderOpen;
-void Flame;
