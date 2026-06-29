@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as PlaylistsRouteImport } from './routes/playlists'
 import { Route as LibraryRouteImport } from './routes/library'
@@ -16,6 +17,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlbumIdRouteImport } from './routes/album.$id'
 import { Route as CollectionTypeIdRouteImport } from './routes/collection.$type.$id'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/library': typeof LibraryRoute
   '/playlists': typeof PlaylistsRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/album/$id': typeof AlbumIdRoute
   '/collection/$type/$id': typeof CollectionTypeIdRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/library': typeof LibraryRoute
   '/playlists': typeof PlaylistsRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/album/$id': typeof AlbumIdRoute
   '/collection/$type/$id': typeof CollectionTypeIdRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/library': typeof LibraryRoute
   '/playlists': typeof PlaylistsRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/album/$id': typeof AlbumIdRoute
   '/collection/$type/$id': typeof CollectionTypeIdRoute
 }
@@ -79,6 +88,7 @@ export interface FileRouteTypes {
     | '/library'
     | '/playlists'
     | '/search'
+    | '/settings'
     | '/album/$id'
     | '/collection/$type/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
     | '/library'
     | '/playlists'
     | '/search'
+    | '/settings'
     | '/album/$id'
     | '/collection/$type/$id'
   id:
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
     | '/library'
     | '/playlists'
     | '/search'
+    | '/settings'
     | '/album/$id'
     | '/collection/$type/$id'
   fileRoutesById: FileRoutesById
@@ -104,12 +116,20 @@ export interface RootRouteChildren {
   LibraryRoute: typeof LibraryRoute
   PlaylistsRoute: typeof PlaylistsRoute
   SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRoute
   AlbumIdRoute: typeof AlbumIdRoute
   CollectionTypeIdRoute: typeof CollectionTypeIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search': {
       id: '/search'
       path: '/search'
@@ -160,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   LibraryRoute: LibraryRoute,
   PlaylistsRoute: PlaylistsRoute,
   SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRoute,
   AlbumIdRoute: AlbumIdRoute,
   CollectionTypeIdRoute: CollectionTypeIdRoute,
 }
