@@ -4,7 +4,7 @@
 //   - blobs: the raw File/Blob for each local track, keyed by track id
 // All access is client-only; callers must guard against SSR.
 
-import { get, set, del, createStore } from "idb-keyval";
+import { get, set, del, clear, createStore } from "idb-keyval";
 import type { Track, Playlist, PlayStat } from "./types";
 
 const metaStore = createStore("aurora-meta", "kv");
@@ -55,4 +55,9 @@ export async function getBlob(id: string): Promise<Blob | undefined> {
 export async function deleteBlob(id: string): Promise<void> {
   if (!isBrowser()) return;
   await del(id, blobStore);
+}
+
+export async function clearAll(): Promise<void> {
+  if (!isBrowser()) return;
+  await Promise.all([clear(metaStore), clear(blobStore)]);
 }
