@@ -282,3 +282,10 @@
   animation-duration: 0.001ms !important;
   transition-duration: 0.001ms !important;
 }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
