@@ -39,8 +39,10 @@ export function TrackRow({ track, context, index, onRemoveFromPlaylist }: TrackR
 
   const isCurrent = currentId === track.id;
   const isFav = favorites.includes(track.id);
-  const offlineCached = usePlayer((s) => s.offlineCached);
-  const isOfflineCached = track.source === "url" && offlineCached.includes(track.id);
+  // Targeted selector so each row only re-renders when its own cached status changes.
+  const isOfflineCached = usePlayer(
+    (s) => track.source === "url" && s.offlineCached.includes(track.id),
+  );
 
   return (
     <div

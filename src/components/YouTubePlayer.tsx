@@ -18,6 +18,13 @@ interface YtEntry {
   addedAt: number;
 }
 
+const VALID_YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "music.youtube.com",
+  "m.youtube.com",
+]);
+
 /** Extract a YouTube video ID from common URL patterns. */
 function extractVideoId(raw: string): string | null {
   const trimmed = raw.trim();
@@ -25,10 +32,9 @@ function extractVideoId(raw: string): string | null {
   if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
   try {
     const u = new URL(trimmed);
-    // youtube.com/watch?v=… and music.youtube.com/watch?v=…
-    if (u.hostname.includes("youtube.com")) {
+    if (VALID_YOUTUBE_HOSTS.has(u.hostname)) {
       const v = u.searchParams.get("v");
-      if (v) return v;
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
       // /embed/<id>
       const m = u.pathname.match(/\/embed\/([A-Za-z0-9_-]{11})/);
       if (m) return m[1];
@@ -39,7 +45,7 @@ function extractVideoId(raw: string): string | null {
     // youtu.be/<id>
     if (u.hostname === "youtu.be") {
       const id = u.pathname.slice(1).split("?")[0];
-      if (id.length === 11) return id;
+      if (/^[A-Za-z0-9_-]{11}$/.test(id)) return id;
     }
   } catch {
     /* not a valid URL — fall through */
@@ -50,7 +56,18 @@ function extractVideoId(raw: string): string | null {
 function loadHistory(): YtEntry[] {
   if (typeof localStorage === "undefined") return [];
   try {
-    return JSON.parse(localStorage.getItem(YT_HISTORY_KEY) || "[]") as YtEntry[];
+    const raw = JSON.parse(localStorage.getItem(YT_HISTORY_KEY) || "[]") as unknown[];
+    // Validate each entry to guard against tampered localStorage.
+    return raw.filter((e): e is YtEntry => {
+      if (typeof e !== "object" || e === null) return false;
+      const entry = e as Record<string, unknown>;
+      return (
+        typeof entry.videoId === "string" &&
+        /^[A-Za-z0-9_-]{11}$/.test(entry.videoId) &&
+        typeof entry.url === "string" &&
+        typeof entry.addedAt === "number"
+      );
+    });
   } catch {
     return [];
   }
@@ -178,7 +195,7 @@ export function YouTubePlayer() {
               >
                 <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
                   <img
-                    src={`https://img.youtube.com/vi/${entry.videoId}/mqdefault.jpg`}
+                    src={`https://img.youtube.com/vi/${encodeURIComponent(entry.videoId)}/mqdefault.jpg`}
                     alt=""
                     className="h-full w-full object-cover"
                     loading="lazy"
@@ -194,7 +211,7 @@ export function YouTubePlayer() {
                   <p className="text-xs text-muted-foreground">YouTube</p>
                 </div>
                 <a
-                  href={`https://music.youtube.com/watch?v=${entry.videoId}`}
+                  href={`https://music.youtube.com/watch?v=${encodeURIComponent(entry.videoId)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}

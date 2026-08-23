@@ -99,6 +99,9 @@ export async function cacheUrlTrack(
     if (!response.ok) return getCachedTrackIds();
 
     const blob = await response.blob();
+    // Skip blobs that are too large (>50 MB) to avoid exhausting storage quota.
+    const MAX_BLOB_BYTES = 50 * 1024 * 1024;
+    if (blob.size > MAX_BLOB_BYTES) return getCachedTrackIds();
     await set(`${PREFIX}${id}`, blob, cacheStore);
 
     const allIds = await getCachedTrackIds();
