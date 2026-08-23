@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Sun, Moon, Smartphone, Sparkles, SlidersHorizontal, Trash2, Info, Zap } from "lucide-react";
+import { Sun, Moon, Smartphone, Sparkles, SlidersHorizontal, Trash2, Info, Zap, WifiOff } from "lucide-react";
 import { useSettings } from "@/store/settings";
 import { usePlayer } from "@/store/player";
 import { ACCENT_PRESETS, type ThemeMode } from "@/lib/types";
@@ -8,6 +8,7 @@ import { EqualizerSheet } from "@/components/EqualizerSheet";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { clearAll } from "@/lib/db";
+import { clearCacheStore } from "@/lib/smartCache";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -31,6 +32,8 @@ function SettingsPage() {
   const animations = useSettings((s) => s.animations);
   const setAnimations = useSettings((s) => s.setAnimations);
   const tracks = usePlayer((s) => s.tracks);
+  const offlineCached = usePlayer((s) => s.offlineCached);
+  const refreshOfflineCache = usePlayer((s) => s.refreshOfflineCache);
   const [eqOpen, setEqOpen] = useState(false);
 
   async function clearCache() {
@@ -38,6 +41,12 @@ function SettingsPage() {
     await clearAll();
     toast.success("Library cleared");
     setTimeout(() => location.reload(), 600);
+  }
+
+  async function clearOfflineCache() {
+    await clearCacheStore();
+    await refreshOfflineCache();
+    toast.success("Offline cache cleared");
   }
 
   return (
@@ -103,6 +112,25 @@ function SettingsPage() {
             Clear
           </Button>
         </Row>
+      </Section>
+
+      {/* Smart offline cache */}
+      <Section title="Smart Offline Cache">
+        <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+          Aurora automatically caches audio streams after you play them so they're
+          available offline the next time, without any manual action. Up to 50 tracks
+          are kept; the ones you listen to least are evicted automatically.
+        </p>
+        <Row icon={WifiOff} label="Cached streams" desc="URL tracks available offline">
+          <span className="text-sm font-semibold tabular-nums">{offlineCached.length}</span>
+        </Row>
+        {offlineCached.length > 0 && (
+          <Row icon={Trash2} label="Clear offline cache" desc="Free up cached stream storage">
+            <Button variant="secondary" size="sm" className="rounded-full" onClick={clearOfflineCache}>
+              Clear
+            </Button>
+          </Row>
+        )}
       </Section>
 
       <p className="px-6 text-center text-xs text-muted-foreground">

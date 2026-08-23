@@ -1,4 +1,4 @@
-import { Heart, MoreVertical, Play, Pause, ListPlus, ListEnd, Trash2, Plus } from "lucide-react";
+import { Heart, MoreVertical, Play, Pause, ListPlus, ListEnd, Trash2, Plus, Wifi } from "lucide-react";
 import { Artwork } from "./Artwork";
 import { usePlayer } from "@/store/player";
 import { formatTime } from "@/lib/selectors";
@@ -39,6 +39,8 @@ export function TrackRow({ track, context, index, onRemoveFromPlaylist }: TrackR
 
   const isCurrent = currentId === track.id;
   const isFav = favorites.includes(track.id);
+  const offlineCached = usePlayer((s) => s.offlineCached);
+  const isOfflineCached = track.source === "url" && offlineCached.includes(track.id);
 
   return (
     <div
@@ -77,6 +79,12 @@ export function TrackRow({ track, context, index, onRemoveFromPlaylist }: TrackR
       {track.duration > 0 && (
         <span className="hidden text-xs tabular-nums text-muted-foreground sm:block">
           {formatTime(track.duration)}
+        </span>
+      )}
+
+      {isOfflineCached && (
+        <span title="Available offline" className="text-primary/70 shrink-0">
+          <Wifi className="h-3.5 w-3.5" />
         </span>
       )}
 

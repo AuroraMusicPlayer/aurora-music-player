@@ -17,6 +17,12 @@ import {
   type PersistedLibrary,
 } from "../lib/db";
 import {
+  cacheUrlTrack,
+  getCachedBlob,
+  getCachedTrackIds,
+  removeCachedBlob,
+} from "../lib/smartCache";
+import {
   EQ_FREQUENCIES,
   EQ_PRESETS,
   type EqualizerState,
@@ -77,6 +83,8 @@ interface PlayerState {
   hydrated: boolean;
   scanning: boolean;
   playerOpen: boolean;
+  /** IDs of URL-source tracks whose audio blob is cached locally. */
+  offlineCached: string[];
 
   hydrate: () => Promise<void>;
   addTracks: (tracks: Track[]) => void;
@@ -114,6 +122,7 @@ interface PlayerState {
   setSleepTimer: (minutes: number | null) => void;
   setPlayerOpen: (v: boolean) => void;
   dismiss: () => void;
+  refreshOfflineCache: () => Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -145,7 +154,16 @@ export const usePlayer = create<PlayerState>((set, get) => {
   }
 
   async function resolveSrc(track: Track): Promise<string | null> {
-    if (track.source === "url") return track.url;
+    if (track.source === "url") {
+      // Serve from smart cache when available (enables true offline playback).
+      const cached = await getCachedBlob(track.id);
+      if (cached) {
+        if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = URL.createObjectURL(cached);
+        return currentObjectUrl;
+      }
+      return track.url;
+    }
     const blob = await getBlob(track.id);
     if (!blob) return null;
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
@@ -175,6 +193,13 @@ export const usePlayer = create<PlayerState>((set, get) => {
     stats[id] = { count: prev.count + 1, lastPlayed: Date.now() };
     set({ stats });
     saveSoon();
+
+    // Background-cache URL tracks so they become available offline.
+    if (track.source === "url" && track.url) {
+      void cacheUrlTrack(track.id, track.url, stats).then((newIds) => {
+        set({ offlineCached: newIds });
+      });
+    }
   }
 
   return {
@@ -198,6 +223,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     hydrated: false,
     scanning: false,
     playerOpen: false,
+    offlineCached: [],
 
     hydrate: async () => {
       if (get().hydrated || !isBrowser()) return;
@@ -246,6 +272,8 @@ export const usePlayer = create<PlayerState>((set, get) => {
         });
       }
       set({ hydrated: true });
+      // Populate offline cache index.
+      void getCachedTrackIds().then((ids) => set({ offlineCached: ids }));
     },
 
     addTracks: (incoming) => {
@@ -268,6 +296,10 @@ export const usePlayer = create<PlayerState>((set, get) => {
       });
       await deleteBlob(id);
       await deleteBlob(`art_${id}`);
+      // Also remove from smart cache if it was a URL track.
+      await removeCachedBlob(id);
+      const newCachedIds = await getCachedTrackIds();
+      set({ offlineCached: newCachedIds });
       saveSoon();
     },
 
@@ -500,6 +532,11 @@ export const usePlayer = create<PlayerState>((set, get) => {
     },
 
     setPlayerOpen: (v) => set({ playerOpen: v }),
+
+    refreshOfflineCache: async () => {
+      const ids = await getCachedTrackIds();
+      set({ offlineCached: ids });
+    },
 
     dismiss: () => {
       engine.pause();
