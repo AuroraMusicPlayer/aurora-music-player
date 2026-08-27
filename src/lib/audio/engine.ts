@@ -4,6 +4,8 @@
 // / notification / Bluetooth controls. Client-only singleton.
 
 import { EQ_FREQUENCIES } from "../types";
+import { Capacitor } from "@capacitor/core";
+import { MediaSession as NativeMediaSession } from "@capgo/capacitor-media-session";
 
 export interface EngineCallbacks {
   onTime?: (t: number) => void;
@@ -47,7 +49,11 @@ class AudioEngine {
   private buildGraph() {
     if (this.graphReady || !this.audio) return;
     try {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const browserWindow = window as typeof window & {
+        webkitAudioContext?: typeof AudioContext;
+      };
+      const Ctx = window.AudioContext || browserWindow.webkitAudioContext;
+      if (!Ctx) return;
       this.ctx = new Ctx();
       this.source = this.ctx.createMediaElementSource(this.audio);
       this.preamp = this.ctx.createGain();
@@ -75,17 +81,17 @@ class AudioEngine {
     }
   }
 
-  async load(src: string, autoplay: boolean) {
+  async load(src: string, autoplay: boolean): Promise<boolean> {
     this.init();
-    if (!this.audio) return;
+    if (!this.audio) return false;
     this.audio.src = src;
     this.audio.load();
-    if (autoplay) await this.play();
+    return autoplay ? this.play() : true;
   }
 
-  async play() {
+  async play(): Promise<boolean> {
     this.init();
-    if (!this.audio) return;
+    if (!this.audio) return false;
     this.buildGraph();
     if (this.ctx && this.ctx.state === "suspended") {
       try {
@@ -96,8 +102,9 @@ class AudioEngine {
     }
     try {
       await this.audio.play();
+      return true;
     } catch {
-      /* autoplay block — ignore */
+      return false;
     }
   }
 
@@ -151,10 +158,17 @@ export function setMediaSessionMeta(opts: {
   album: string;
   artwork: string | null;
 }) {
+  const artwork = opts.artwork ? [{ src: opts.artwork, sizes: "512x512", type: "image/png" }] : [];
+  if (Capacitor.isNativePlatform()) {
+    void NativeMediaSession.setMetadata({
+      title: opts.title,
+      artist: opts.artist,
+      album: opts.album,
+      artwork,
+    }).catch(() => undefined);
+    return;
+  }
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-  const artwork = opts.artwork
-    ? [{ src: opts.artwork, sizes: "512x512", type: "image/png" }]
-    : [];
   navigator.mediaSession.metadata = new MediaMetadata({
     title: opts.title,
     artist: opts.artist,
@@ -170,6 +184,21 @@ export function setMediaSessionHandlers(handlers: {
   prev: () => void;
   seek: (t: number) => void;
 }) {
+  if (Capacitor.isNativePlatform()) {
+    const actions = [
+      ["play", handlers.play],
+      ["pause", handlers.pause],
+      ["nexttrack", handlers.next],
+      ["previoustrack", handlers.prev],
+    ] as const;
+    for (const [action, handler] of actions) {
+      void NativeMediaSession.setActionHandler({ action }, handler).catch(() => undefined);
+    }
+    void NativeMediaSession.setActionHandler({ action: "seekto" }, (details) => {
+      if (details.seekTime != null) handlers.seek(details.seekTime);
+    }).catch(() => undefined);
+    return;
+  }
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
   const ms = navigator.mediaSession;
   ms.setActionHandler("play", () => handlers.play());
@@ -186,6 +215,29 @@ export function setMediaSessionHandlers(handlers: {
 }
 
 export function setMediaSessionPlaybackState(state: "playing" | "paused" | "none") {
+  if (Capacitor.isNativePlatform()) {
+    void NativeMediaSession.setPlaybackState({ playbackState: state }).catch(() => undefined);
+    return;
+  }
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
   navigator.mediaSession.playbackState = state;
+}
+
+export function setMediaSessionPositionState(opts: {
+  duration: number;
+  position: number;
+  playbackRate: number;
+}) {
+  if (!Number.isFinite(opts.duration) || opts.duration <= 0) return;
+  const position = Math.max(0, Math.min(opts.position, opts.duration));
+  if (Capacitor.isNativePlatform()) {
+    void NativeMediaSession.setPositionState({ ...opts, position }).catch(() => undefined);
+    return;
+  }
+  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.setPositionState({ ...opts, position });
+  } catch {
+    /* optional browser feature */
+  }
 }

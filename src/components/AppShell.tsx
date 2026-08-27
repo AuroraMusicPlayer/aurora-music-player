@@ -6,17 +6,21 @@ import { FullPlayer } from "./FullPlayer";
 import { Toaster } from "@/components/ui/sonner";
 import { usePlayer } from "@/store/player";
 import { useSettings } from "@/store/settings";
+import { useOnline } from "@/store/online";
+import { OnlinePlayerDock } from "./OnlinePlayerDock";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const hydrate = usePlayer((s) => s.hydrate);
   const currentId = usePlayer((s) => s.currentId);
   const playerOpen = usePlayer((s) => s.playerOpen);
   const hydrateSettings = useSettings((s) => s.hydrate);
+  const hydrateOnline = useOnline((s) => s.hydrate);
 
   useEffect(() => {
     hydrateSettings();
+    hydrateOnline();
     void hydrate();
-  }, [hydrate, hydrateSettings]);
+  }, [hydrate, hydrateOnline, hydrateSettings]);
 
   return (
     <div className="relative mx-auto flex h-[100dvh] max-w-3xl flex-col overflow-hidden">
@@ -25,6 +29,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mini player */}
       <AnimatePresence>{currentId && <MiniPlayer key="mini" />}</AnimatePresence>
+
+      {/* Visible, route-independent hosted player. */}
+      <OnlinePlayerDock />
 
       {/* Bottom nav */}
       <BottomNav />

@@ -2,11 +2,13 @@
 // stats) and live playback state, and drives the audio engine.
 
 import { create } from "zustand";
+import { Network } from "@capacitor/network";
 import {
   engine,
   setMediaSessionHandlers,
   setMediaSessionMeta,
   setMediaSessionPlaybackState,
+  setMediaSessionPositionState,
 } from "../lib/audio/engine";
 import {
   loadLibrary,
@@ -16,6 +18,7 @@ import {
   isBrowser,
   type PersistedLibrary,
 } from "../lib/db";
+import { cacheUrlTrack, getCacheSummary, getCachedBlob, removeCachedBlob } from "../lib/smartCache";
 import {
   EQ_FREQUENCIES,
   EQ_PRESETS,
@@ -25,6 +28,8 @@ import {
   type RepeatMode,
   type Track,
 } from "../lib/types";
+import { useSettings } from "./settings";
+import { announceLocalPlayback } from "../lib/playbackBus";
 
 const EQ_KEY = "aurora-eq";
 
@@ -77,6 +82,9 @@ interface PlayerState {
   hydrated: boolean;
   scanning: boolean;
   playerOpen: boolean;
+  /** IDs of URL-source tracks whose audio blob is cached locally. */
+  offlineCached: string[];
+  offlineCacheBytes: number;
 
   hydrate: () => Promise<void>;
   addTracks: (tracks: Track[]) => void;
@@ -114,11 +122,27 @@ interface PlayerState {
   setSleepTimer: (minutes: number | null) => void;
   setPlayerOpen: (v: boolean) => void;
   dismiss: () => void;
+  refreshOfflineCache: () => Promise<void>;
+  cacheTrack: (id: string) => Promise<boolean>;
+  uncacheTrack: (id: string) => Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let currentObjectUrl: string | null = null;
 let sleepTimeout: ReturnType<typeof setTimeout> | null = null;
+let lastPositionUpdate = 0;
+
+async function shouldAutoCache(): Promise<boolean> {
+  const mode = useSettings.getState().smartCacheMode;
+  if (mode === "off") return false;
+  if (mode === "always") return true;
+  try {
+    const status = await Network.getStatus();
+    return status.connected && status.connectionType === "wifi";
+  } catch {
+    return false;
+  }
+}
 
 export const usePlayer = create<PlayerState>((set, get) => {
   function snapshot(): PersistedLibrary {
@@ -145,7 +169,16 @@ export const usePlayer = create<PlayerState>((set, get) => {
   }
 
   async function resolveSrc(track: Track): Promise<string | null> {
-    if (track.source === "url") return track.url;
+    if (track.source === "url") {
+      // Serve from smart cache when available (enables true offline playback).
+      const cached = await getCachedBlob(track.id);
+      if (cached) {
+        if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = URL.createObjectURL(cached);
+        return currentObjectUrl;
+      }
+      return track.url;
+    }
     const blob = await getBlob(track.id);
     if (!blob) return null;
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
@@ -156,10 +189,15 @@ export const usePlayer = create<PlayerState>((set, get) => {
   async function loadAndPlay(id: string) {
     const track = trackById(id);
     if (!track) return;
+    announceLocalPlayback();
     const src = await resolveSrc(track);
     if (!src) return;
     set({ currentId: id, currentTime: 0 });
-    await engine.load(src, true);
+    const started = await engine.load(src, true);
+    if (!started) {
+      set({ isPlaying: false });
+      return;
+    }
     engine.setRate(get().rate);
     const eq = get().eq;
     engine.setEqEnabled(eq.enabled, eq.bands);
@@ -175,6 +213,17 @@ export const usePlayer = create<PlayerState>((set, get) => {
     stats[id] = { count: prev.count + 1, lastPlayed: Date.now() };
     set({ stats });
     saveSoon();
+
+    // Only eligible direct audio may be smart-cached. Hosted services such as
+    // YouTube are intentionally kept outside this native/offline library.
+    if (track.source === "url" && track.url && track.downloadAllowed) {
+      void shouldAutoCache().then(async (allowed) => {
+        if (!allowed) return;
+        const maxBytes = useSettings.getState().cacheLimitMb * 1024 * 1024;
+        await cacheUrlTrack(track.id, track.url, stats, maxBytes);
+        await get().refreshOfflineCache();
+      });
+    }
   }
 
   return {
@@ -198,13 +247,33 @@ export const usePlayer = create<PlayerState>((set, get) => {
     hydrated: false,
     scanning: false,
     playerOpen: false,
+    offlineCached: [],
+    offlineCacheBytes: 0,
 
     hydrate: async () => {
       if (get().hydrated || !isBrowser()) return;
       engine.init();
       engine.setCallbacks({
-        onTime: (t) => set({ currentTime: t }),
-        onDuration: (d) => set({ duration: d }),
+        onTime: (t) => {
+          set({ currentTime: t });
+          const now = Date.now();
+          if (now - lastPositionUpdate >= 1000) {
+            lastPositionUpdate = now;
+            setMediaSessionPositionState({
+              duration: get().duration,
+              position: t,
+              playbackRate: get().rate,
+            });
+          }
+        },
+        onDuration: (d) => {
+          set({ duration: d });
+          setMediaSessionPositionState({
+            duration: d,
+            position: get().currentTime,
+            playbackRate: get().rate,
+          });
+        },
         onPlay: () => {
           set({ isPlaying: true });
           setMediaSessionPlaybackState("playing");
@@ -246,6 +315,8 @@ export const usePlayer = create<PlayerState>((set, get) => {
         });
       }
       set({ hydrated: true });
+      // Populate offline cache index.
+      void get().refreshOfflineCache();
     },
 
     addTracks: (incoming) => {
@@ -257,6 +328,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
 
     removeTrack: async (id) => {
       const s = get();
+      if (s.currentId === id) get().dismiss();
       set({
         tracks: s.tracks.filter((t) => t.id !== id),
         favorites: s.favorites.filter((f) => f !== id),
@@ -268,6 +340,9 @@ export const usePlayer = create<PlayerState>((set, get) => {
       });
       await deleteBlob(id);
       await deleteBlob(`art_${id}`);
+      // Also remove from smart cache if it was a URL track.
+      await removeCachedBlob(id);
+      await get().refreshOfflineCache();
       saveSoon();
     },
 
@@ -356,6 +431,11 @@ export const usePlayer = create<PlayerState>((set, get) => {
     setRate: (r) => {
       engine.setRate(r);
       set({ rate: r });
+      setMediaSessionPositionState({
+        duration: get().duration,
+        position: get().currentTime,
+        playbackRate: r,
+      });
     },
 
     toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
@@ -442,9 +522,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     addToPlaylist: (playlistId, ids) => {
       set((s) => ({
         playlists: s.playlists.map((p) =>
-          p.id === playlistId
-            ? { ...p, trackIds: [...new Set([...p.trackIds, ...ids])] }
-            : p,
+          p.id === playlistId ? { ...p, trackIds: [...new Set([...p.trackIds, ...ids])] } : p,
         ),
       }));
       saveSoon();
@@ -453,9 +531,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     removeFromPlaylist: (playlistId, trackId) => {
       set((s) => ({
         playlists: s.playlists.map((p) =>
-          p.id === playlistId
-            ? { ...p, trackIds: p.trackIds.filter((t) => t !== trackId) }
-            : p,
+          p.id === playlistId ? { ...p, trackIds: p.trackIds.filter((t) => t !== trackId) } : p,
         ),
       }));
       saveSoon();
@@ -501,8 +577,28 @@ export const usePlayer = create<PlayerState>((set, get) => {
 
     setPlayerOpen: (v) => set({ playerOpen: v }),
 
+    refreshOfflineCache: async () => {
+      const summary = await getCacheSummary();
+      set({ offlineCached: summary.trackIds, offlineCacheBytes: summary.bytes });
+    },
+
+    cacheTrack: async (id) => {
+      const track = trackById(id);
+      if (track?.source !== "url" || !track.url || !track.downloadAllowed) return false;
+      const maxBytes = useSettings.getState().cacheLimitMb * 1024 * 1024;
+      const ids = await cacheUrlTrack(track.id, track.url, get().stats, maxBytes);
+      await get().refreshOfflineCache();
+      return ids.includes(id);
+    },
+
+    uncacheTrack: async (id) => {
+      await removeCachedBlob(id);
+      await get().refreshOfflineCache();
+    },
+
     dismiss: () => {
       engine.pause();
+      setMediaSessionPlaybackState("none");
       if (currentObjectUrl) {
         URL.revokeObjectURL(currentObjectUrl);
         currentObjectUrl = null;
@@ -511,4 +607,3 @@ export const usePlayer = create<PlayerState>((set, get) => {
     },
   };
 });
-

@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { importFiles, type ImportProgress } from "@/lib/import";
 import { trackFromUrl } from "@/lib/metadata";
 import { usePlayer } from "@/store/player";
@@ -21,6 +23,7 @@ export function AddMusicDialog({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [url, setUrl] = useState("");
   const [urlTitle, setUrlTitle] = useState("");
+  const [downloadAllowed, setDownloadAllowed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const addTracks = usePlayer((s) => s.addTracks);
@@ -47,10 +50,11 @@ export function AddMusicDialog({ children }: { children: ReactNode }) {
       toast.error("Enter a valid URL");
       return;
     }
-    addTracks([trackFromUrl(url.trim(), urlTitle)]);
+    addTracks([trackFromUrl(url.trim(), urlTitle, downloadAllowed)]);
     toast.success("Stream added");
     setUrl("");
     setUrlTitle("");
+    setDownloadAllowed(false);
     setOpen(false);
   }
 
@@ -98,9 +102,7 @@ export function AddMusicDialog({ children }: { children: ReactNode }) {
                   <FileMusic className="h-6 w-6 text-primary" />
                   <div>
                     <p className="text-sm font-medium">Choose files</p>
-                    <p className="text-xs text-muted-foreground">
-                      MP3, FLAC, AAC, M4A, OGG, WAV…
-                    </p>
+                    <p className="text-xs text-muted-foreground">MP3, FLAC, AAC, M4A, OGG, WAV…</p>
                   </div>
                 </button>
                 <p className="text-center text-xs text-muted-foreground">
@@ -139,12 +141,24 @@ export function AddMusicDialog({ children }: { children: ReactNode }) {
               value={urlTitle}
               onChange={(e) => setUrlTitle(e.target.value)}
             />
+            <div className="flex items-start gap-2 rounded-xl border border-border bg-secondary/40 p-3">
+              <Checkbox
+                id="download-permission"
+                checked={downloadAllowed}
+                onCheckedChange={(value) => setDownloadAllowed(value === true)}
+                className="mt-0.5"
+              />
+              <Label htmlFor="download-permission" className="text-xs leading-relaxed">
+                I have permission to download this direct audio file. Allow manual download and
+                smart offline caching.
+              </Label>
+            </div>
             <Button onClick={handleAddUrl} className="w-full" disabled={!url.trim()}>
               <Link2 className="mr-2 h-4 w-4" /> Add stream
             </Button>
             <p className="text-xs text-muted-foreground">
-              Paste a direct link to an audio file. Note: YouTube / streaming-service links
-              are not supported — only direct audio URLs.
+              Paste a direct link to an audio file. YouTube and streaming-service pages belong in
+              Online Search and are never downloaded.
             </p>
           </TabsContent>
         </Tabs>

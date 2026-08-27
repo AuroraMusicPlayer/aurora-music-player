@@ -7,6 +7,25 @@ export type ThemeMode = "light" | "dark" | "amoled" | "system";
 /** Where a track's audio data comes from. */
 export type TrackSource = "local" | "url";
 
+export type OnlineProvider = "youtube";
+
+export interface OnlineTrack {
+  id: string;
+  videoId: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  provider: OnlineProvider;
+  addedAt: number;
+}
+
+export interface OnlinePlaylist {
+  id: string;
+  name: string;
+  videoIds: string[];
+  createdAt: number;
+}
+
 export interface Track {
   id: string;
   title: string;
@@ -23,6 +42,8 @@ export interface Track {
   source: TrackSource;
   /** For url tracks: the streamable URL. For local: empty (blob lives in IDB). */
   url: string;
+  /** User confirmed this direct-audio source may be stored for offline use. */
+  downloadAllowed?: boolean;
   /** Object URL for embedded/derived artwork, created at runtime. */
   artwork: string | null;
   /** Embedded lyrics if present. */

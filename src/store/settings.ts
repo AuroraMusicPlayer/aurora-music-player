@@ -4,16 +4,24 @@
 import { create } from "zustand";
 import { ACCENT_PRESETS, type ThemeMode } from "../lib/types";
 
+export type SmartCacheMode = "off" | "wifi" | "always";
+
 interface SettingsState {
   theme: ThemeMode;
   accentName: string;
   animations: boolean;
   language: string;
+  youtubeApiKey: string;
+  smartCacheMode: SmartCacheMode;
+  cacheLimitMb: number;
   hydrated: boolean;
   setTheme: (t: ThemeMode) => void;
   setAccent: (name: string) => void;
   setAnimations: (v: boolean) => void;
   setLanguage: (l: string) => void;
+  setYouTubeApiKey: (key: string) => void;
+  setSmartCacheMode: (mode: SmartCacheMode) => void;
+  setCacheLimitMb: (megabytes: number) => void;
   hydrate: () => void;
 }
 
@@ -55,7 +63,10 @@ export function applyTheme(theme: ThemeMode, accentName: string, animations: boo
     meta.setAttribute("name", "theme-color");
     document.head.appendChild(meta);
   }
-  meta.setAttribute("content", resolved === "light" ? "#ffffff" : resolved === "amoled" ? "#000000" : "#1a1a2e");
+  meta.setAttribute(
+    "content",
+    resolved === "light" ? "#ffffff" : resolved === "amoled" ? "#000000" : "#1a1a2e",
+  );
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -63,6 +74,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
   accentName: "Aurora",
   animations: true,
   language: "English",
+  youtubeApiKey: "",
+  smartCacheMode: "wifi",
+  cacheLimitMb: 1024,
   hydrated: false,
 
   setTheme: (theme) => {
@@ -87,6 +101,20 @@ export const useSettings = create<SettingsState>((set, get) => ({
     set({ language });
     persist({ language });
   },
+  setYouTubeApiKey: (youtubeApiKey) => {
+    const value = youtubeApiKey.trim();
+    set({ youtubeApiKey: value });
+    persist({ youtubeApiKey: value });
+  },
+  setSmartCacheMode: (smartCacheMode) => {
+    set({ smartCacheMode });
+    persist({ smartCacheMode });
+  },
+  setCacheLimitMb: (cacheLimitMb) => {
+    const value = Math.min(10_240, Math.max(256, Math.round(cacheLimitMb)));
+    set({ cacheLimitMb: value });
+    persist({ cacheLimitMb: value });
+  },
 
   hydrate: () => {
     if (typeof localStorage === "undefined" || get().hydrated) return;
@@ -96,7 +124,22 @@ export const useSettings = create<SettingsState>((set, get) => ({
       const accentName: string = raw.accentName ?? "Aurora";
       const animations: boolean = raw.animations ?? true;
       const language: string = raw.language ?? "English";
-      set({ theme, accentName, animations, language, hydrated: true });
+      const youtubeApiKey: string = raw.youtubeApiKey ?? "";
+      const smartCacheMode: SmartCacheMode =
+        raw.smartCacheMode === "off" || raw.smartCacheMode === "always"
+          ? raw.smartCacheMode
+          : "wifi";
+      const cacheLimitMb: number = typeof raw.cacheLimitMb === "number" ? raw.cacheLimitMb : 1024;
+      set({
+        theme,
+        accentName,
+        animations,
+        language,
+        youtubeApiKey,
+        smartCacheMode,
+        cacheLimitMb,
+        hydrated: true,
+      });
       applyTheme(theme, accentName, animations);
     } catch {
       set({ hydrated: true });
