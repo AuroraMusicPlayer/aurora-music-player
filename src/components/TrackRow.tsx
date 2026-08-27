@@ -1,4 +1,16 @@
-import { Heart, MoreVertical, Play, Pause, ListPlus, ListEnd, Trash2, Plus, Wifi } from "lucide-react";
+import { useState } from "react";
+import {
+  Download,
+  Heart,
+  ListEnd,
+  ListPlus,
+  LoaderCircle,
+  MoreVertical,
+  Pause,
+  Play,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Artwork } from "./Artwork";
 import { usePlayer } from "@/store/player";
 import { formatTime } from "@/lib/selectors";
@@ -36,6 +48,9 @@ export function TrackRow({ track, context, index, onRemoveFromPlaylist }: TrackR
   const addToPlaylist = usePlayer((s) => s.addToPlaylist);
   const createPlaylist = usePlayer((s) => s.createPlaylist);
   const removeTrack = usePlayer((s) => s.removeTrack);
+  const cacheTrack = usePlayer((s) => s.cacheTrack);
+  const uncacheTrack = usePlayer((s) => s.uncacheTrack);
+  const [cacheBusy, setCacheBusy] = useState(false);
 
   const isCurrent = currentId === track.id;
   const isFav = favorites.includes(track.id);
@@ -86,7 +101,7 @@ export function TrackRow({ track, context, index, onRemoveFromPlaylist }: TrackR
 
       {isOfflineCached && (
         <span title="Available offline" className="text-primary/70 shrink-0">
-          <Wifi className="h-3.5 w-3.5" />
+          <Download className="h-3.5 w-3.5" />
         </span>
       )}
 
@@ -164,6 +179,30 @@ export function TrackRow({ track, context, index, onRemoveFromPlaylist }: TrackR
           <DropdownMenuItem onClick={() => toggleFavorite(track.id)}>
             <Heart className="mr-2 h-4 w-4" /> {isFav ? "Remove favorite" : "Add to favorites"}
           </DropdownMenuItem>
+          {track.source === "url" && track.downloadAllowed && (
+            <DropdownMenuItem
+              disabled={cacheBusy}
+              onClick={async () => {
+                setCacheBusy(true);
+                if (isOfflineCached) {
+                  await uncacheTrack(track.id);
+                  toast.success("Offline download removed");
+                } else {
+                  const cached = await cacheTrack(track.id);
+                  if (cached) toast.success("Available offline");
+                  else toast.error("Could not download this direct audio file");
+                }
+                setCacheBusy(false);
+              }}
+            >
+              {cacheBusy ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              {isOfflineCached ? "Remove download" : "Download for offline"}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           {onRemoveFromPlaylist && (
             <DropdownMenuItem onClick={() => onRemoveFromPlaylist(track.id)}>

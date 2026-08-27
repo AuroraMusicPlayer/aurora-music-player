@@ -4,16 +4,7 @@
 import { parseBlob } from "music-metadata";
 import type { Track } from "./types";
 
-export const SUPPORTED_EXTENSIONS = [
-  "mp3",
-  "flac",
-  "aac",
-  "m4a",
-  "ogg",
-  "wav",
-  "alac",
-  "opus",
-];
+export const SUPPORTED_EXTENSIONS = ["mp3", "flac", "aac", "m4a", "ogg", "wav", "alac", "opus"];
 
 export function isSupportedAudio(file: File): boolean {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -92,9 +83,8 @@ export async function parseTrack(file: File): Promise<{ track: Track; artBlob: B
   return { track: base, artBlob };
 }
 
-
-/** Build a Track from a streamable URL. */
-export function trackFromUrl(url: string, title?: string): Track {
+/** Build a Track from a direct, streamable audio URL. */
+export function trackFromUrl(url: string, title?: string, downloadAllowed = false): Track {
   const cleanName = (() => {
     try {
       const u = new URL(url);
@@ -116,6 +106,7 @@ export function trackFromUrl(url: string, title?: string): Track {
     folder: "Streams",
     source: "url",
     url,
+    downloadAllowed,
     artwork: null,
     lyrics: null,
     addedAt: Date.now(),

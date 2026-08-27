@@ -1,111 +1,178 @@
-// Smart offline caching for Aurora Music.
-// Automatically fetches and caches audio blobs for URL-source tracks in IndexedDB.
-// Intelligently evicts the least-listened tracks when the cache limit is reached.
+// Smart offline cache for direct audio that the user is allowed to download.
+// YouTube and other hosted streaming services never pass through this module.
 
-import { get, set, del, keys, createStore } from "idb-keyval";
+import { createStore, del, get, keys, set } from "idb-keyval";
 import type { PlayStat } from "./types";
 
 const cacheStore = createStore("aurora-cache", "audio");
-
-/** Maximum number of URL tracks to keep cached. */
-const MAX_CACHED = 50;
-/** Tracks not played within this many days are candidates for eviction. */
-const STALE_DAYS = 30;
-/** IDB key prefix so cached blobs never collide with other stores. */
 const PREFIX = "c_";
+const STALE_DAYS = 30;
+const MAX_SINGLE_FILE_BYTES = 250 * 1024 * 1024;
+
+interface CacheRecord {
+  blob: Blob;
+  size: number;
+  cachedAt: number;
+  lastAccess: number;
+}
+
+export interface CacheSummary {
+  trackIds: string[];
+  bytes: number;
+}
 
 function isBrowserWithIDB(): boolean {
   return typeof window !== "undefined" && typeof indexedDB !== "undefined";
 }
 
-/** Returns the IDs of all URL tracks currently stored in the smart cache. */
-export async function getCachedTrackIds(): Promise<string[]> {
-  if (!isBrowserWithIDB()) return [];
+function toRecord(value: unknown): CacheRecord | null {
+  // Migrate blobs written by older Aurora builds without downloading them again.
+  if (value instanceof Blob) {
+    return { blob: value, size: value.size, cachedAt: 0, lastAccess: 0 };
+  }
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<CacheRecord>;
+  if (!(candidate.blob instanceof Blob)) return null;
+  return {
+    blob: candidate.blob,
+    size: candidate.size ?? candidate.blob.size,
+    cachedAt: candidate.cachedAt ?? 0,
+    lastAccess: candidate.lastAccess ?? 0,
+  };
+}
+
+async function getRecords(): Promise<Array<{ id: string; record: CacheRecord }>> {
+  const allKeys = (await keys(cacheStore)) as string[];
+  const records = await Promise.all(
+    allKeys
+      .filter((key) => key.startsWith(PREFIX))
+      .map(async (key) => {
+        const record = toRecord(await get<unknown>(key, cacheStore));
+        return record ? { id: key.slice(PREFIX.length), record } : null;
+      }),
+  );
+  return records.filter((entry): entry is { id: string; record: CacheRecord } => entry !== null);
+}
+
+export async function getCacheSummary(): Promise<CacheSummary> {
+  if (!isBrowserWithIDB()) return { trackIds: [], bytes: 0 };
   try {
-    const allKeys = (await keys(cacheStore)) as string[];
-    return allKeys.filter((k) => k.startsWith(PREFIX)).map((k) => k.slice(PREFIX.length));
+    const records = await getRecords();
+    return {
+      trackIds: records.map(({ id }) => id),
+      bytes: records.reduce((total, { record }) => total + record.size, 0),
+    };
   } catch {
-    return [];
+    return { trackIds: [], bytes: 0 };
   }
 }
 
-/** Retrieve the cached audio blob for a URL track, if any. */
+/** Returns the IDs of all direct-audio tracks stored in the offline cache. */
+export async function getCachedTrackIds(): Promise<string[]> {
+  return (await getCacheSummary()).trackIds;
+}
+
+/** Retrieve cached audio and mark it as recently used. */
 export async function getCachedBlob(id: string): Promise<Blob | undefined> {
   if (!isBrowserWithIDB()) return undefined;
   try {
-    return await get<Blob>(`${PREFIX}${id}`, cacheStore);
+    const key = `${PREFIX}${id}`;
+    const record = toRecord(await get<unknown>(key, cacheStore));
+    if (!record) return undefined;
+    void set(key, { ...record, lastAccess: Date.now() }, cacheStore);
+    return record.blob;
   } catch {
     return undefined;
   }
 }
 
-/** Remove a single cached blob (e.g. when the track is deleted from the library). */
 export async function removeCachedBlob(id: string): Promise<void> {
   if (!isBrowserWithIDB()) return;
   try {
     await del(`${PREFIX}${id}`, cacheStore);
   } catch {
-    /* ignore */
+    /* ignore storage errors */
   }
 }
 
-/** Wipe all cached audio blobs. */
 export async function clearCacheStore(): Promise<void> {
   if (!isBrowserWithIDB()) return;
   try {
-    const ids = await getCachedTrackIds();
-    await Promise.all(ids.map((id) => removeCachedBlob(id)));
+    const { trackIds } = await getCacheSummary();
+    await Promise.all(trackIds.map((id) => removeCachedBlob(id)));
   } catch {
-    /* ignore */
+    /* ignore storage errors */
   }
 }
 
-function trackScore(stat: PlayStat | undefined): number {
-  if (!stat || stat.count === 0) return 0;
+function trackScore(stat: PlayStat | undefined, record: CacheRecord): number {
+  if (!stat || stat.count === 0) return record.lastAccess > 0 ? 0.01 : 0;
   const daysSince = (Date.now() - stat.lastPlayed) / 86_400_000;
   if (daysSince > STALE_DAYS) return 0;
   return stat.count / Math.max(1, daysSince);
 }
 
-async function evictIfNeeded(
+async function evictToLimit(
   stats: Record<string, PlayStat>,
-  cachedIds: string[],
+  maxBytes: number,
+  protectedId: string,
 ): Promise<void> {
-  if (cachedIds.length <= MAX_CACHED) return;
-  const scored = cachedIds
-    .map((id) => ({ id, score: trackScore(stats[id]) }))
-    .sort((a, b) => a.score - b.score);
-  const excess = cachedIds.length - MAX_CACHED;
-  await Promise.all(scored.slice(0, excess).map((e) => removeCachedBlob(e.id)));
+  const records = await getRecords();
+  let total = records.reduce((sum, { record }) => sum + record.size, 0);
+  if (total <= maxBytes) return;
+
+  const candidates = records
+    .filter(({ id }) => id !== protectedId)
+    .map(({ id, record }) => ({
+      id,
+      size: record.size,
+      score: trackScore(stats[id], record),
+      lastAccess: record.lastAccess,
+    }))
+    .sort((a, b) => a.score - b.score || a.lastAccess - b.lastAccess);
+
+  for (const candidate of candidates) {
+    if (total <= maxBytes) break;
+    await removeCachedBlob(candidate.id);
+    total -= candidate.size;
+  }
 }
 
 /**
- * Background-fetch and cache a URL-source track's audio blob.
- * Safe to fire-and-forget — errors are swallowed silently.
- * Returns the updated list of cached track IDs after the operation.
+ * Download one explicitly eligible direct-audio URL into Aurora's cache.
+ * The caller is responsible for checking the track's `downloadAllowed` flag.
  */
 export async function cacheUrlTrack(
   id: string,
   url: string,
   stats: Record<string, PlayStat>,
+  maxBytes: number,
 ): Promise<string[]> {
-  if (!isBrowserWithIDB()) return [];
+  if (!isBrowserWithIDB() || maxBytes <= 0) return [];
   try {
-    // Skip if already cached.
-    const existing = await get<Blob>(`${PREFIX}${id}`, cacheStore);
+    const existing = toRecord(await get<unknown>(`${PREFIX}${id}`, cacheStore));
     if (existing) return getCachedTrackIds();
 
     const response = await fetch(url, { credentials: "omit" });
     if (!response.ok) return getCachedTrackIds();
 
-    const blob = await response.blob();
-    // Skip blobs that are too large (>50 MB) to avoid exhausting storage quota.
-    const MAX_BLOB_BYTES = 50 * 1024 * 1024;
-    if (blob.size > MAX_BLOB_BYTES) return getCachedTrackIds();
-    await set(`${PREFIX}${id}`, blob, cacheStore);
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (contentType && !contentType.startsWith("audio/") && !contentType.includes("octet-stream")) {
+      return getCachedTrackIds();
+    }
 
-    const allIds = await getCachedTrackIds();
-    await evictIfNeeded(stats, allIds);
+    const blob = await response.blob();
+    if (blob.size === 0 || blob.size > Math.min(maxBytes, MAX_SINGLE_FILE_BYTES)) {
+      return getCachedTrackIds();
+    }
+
+    const now = Date.now();
+    await set(
+      `${PREFIX}${id}`,
+      { blob, size: blob.size, cachedAt: now, lastAccess: now } satisfies CacheRecord,
+      cacheStore,
+    );
+    await evictToLimit(stats, maxBytes, id);
     return getCachedTrackIds();
   } catch {
     return getCachedTrackIds();

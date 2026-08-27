@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus, Play, Heart, Clock } from "lucide-react";
+import { Plus, Play, Heart, Clock, Search, Sparkles } from "lucide-react";
 import { usePlayer } from "@/store/player";
 import {
   byIds,
@@ -15,6 +15,8 @@ import { MediaCard } from "@/components/MediaCard";
 import { Shelf } from "@/components/Shelf";
 import { Artwork } from "@/components/Artwork";
 import { Button } from "@/components/ui/button";
+import { useOnline } from "@/store/online";
+import type { OnlineTrack } from "@/lib/types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,6 +46,10 @@ function Home() {
   const playContext = usePlayer((s) => s.playContext);
   const currentId = usePlayer((s) => s.currentId);
   const setPlayerOpen = usePlayer((s) => s.setPlayerOpen);
+  const onlineSaved = useOnline((s) => s.saved);
+  const onlineHistory = useOnline((s) => s.history);
+  const onlineStats = useOnline((s) => s.stats);
+  const playOnline = useOnline((s) => s.play);
 
   const recent = recentlyPlayed(tracks, stats);
   const most = mostPlayed(tracks, stats);
@@ -53,6 +59,21 @@ function Home() {
   const genres = getGenres(tracks).slice(0, 12);
 
   const resume = currentId ? byIds(tracks, [currentId])[0] : recent[0];
+  const onlinePicks = [
+    ...new Map([...onlineSaved, ...onlineHistory].map((track) => [track.videoId, track])).values(),
+  ]
+    .sort(
+      (a, b) =>
+        (onlineStats[b.videoId]?.count ?? 0) - (onlineStats[a.videoId]?.count ?? 0) ||
+        (onlineStats[b.videoId]?.lastPlayed ?? b.addedAt) -
+          (onlineStats[a.videoId]?.lastPlayed ?? a.addedAt),
+    )
+    .slice(0, 12);
+
+  function startOnline(track: OnlineTrack) {
+    usePlayer.getState().dismiss();
+    playOnline(track);
+  }
 
   return (
     <div className="relative space-y-7 pb-6">
@@ -79,142 +100,214 @@ function Home() {
             <div key={i} className="h-40 animate-pulse rounded-2xl bg-muted" />
           ))}
         </div>
-      ) : tracks.length === 0 ? (
-        <EmptyLibrary />
       ) : (
         <>
-          {/* Continue listening */}
-          {resume && (
-            <section className="px-4">
-              <h2 className="mb-3 text-lg font-bold font-display">Continue listening</h2>
-              <button
-                onClick={() => {
-                  if (currentId) setPlayerOpen(true);
-                  else playContext([resume.id]);
-                }}
-                className="glass flex w-full items-center gap-4 rounded-2xl p-3 text-left transition-transform active:scale-[0.98]"
-              >
-                <Artwork src={resume.artwork} className="h-20 w-20" rounded="rounded-xl" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold">{resume.title}</p>
-                  <p className="truncate text-sm text-muted-foreground">{resume.artist}</p>
-                </div>
-                <span className="flex h-12 w-12 items-center justify-center rounded-full aurora-bg text-primary-foreground shadow">
-                  <Play className="ml-0.5 h-6 w-6" fill="currentColor" />
-                </span>
-              </button>
-            </section>
-          )}
-
-          {/* Quick access tiles */}
-          <div className="grid grid-cols-2 gap-3 px-4">
-            <QuickTile to="/library" icon={Clock} label="Recently added" tint="recent" />
-            <QuickTile to="/playlists" icon={Heart} label="Favorites" tint="fav" search />
-          </div>
-
-          {recent.length > 0 && (
-            <Shelf title="Recently played">
-              {recent.slice(0, 12).map((t) => (
-                <MediaCard
-                  key={t.id}
-                  to="/album/$id"
-                  params={{ id: getAlbums(tracks).find((a) => a.trackIds.includes(t.id))?.id ?? "" }}
-                  title={t.title}
-                  subtitle={t.artist}
-                  artwork={t.artwork}
-                />
-              ))}
-            </Shelf>
-          )}
-
-          {most.length > 0 && (
-            <Shelf title="Most played">
-              {most.slice(0, 12).map((t) => (
-                <MediaCard
-                  key={t.id}
-                  to="/collection/$type/$id"
-                  params={{ type: "most", id: "all" }}
-                  title={t.title}
-                  subtitle={`${stats[t.id]?.count ?? 0} plays`}
-                  artwork={t.artwork}
-                />
-              ))}
-            </Shelf>
-          )}
-
-          {favTracks.length > 0 && (
-            <Shelf
-              title="Favorites"
-              action={
-                <Link to="/collection/$type/$id" params={{ type: "favorites", id: "all" }} className="text-xs font-medium text-primary">
-                  See all
-                </Link>
-              }
+          <section className="px-4">
+            <Link
+              to="/search"
+              className="glass flex items-center gap-3 rounded-2xl p-4 transition-transform active:scale-[0.98]"
             >
-              {favTracks.slice(0, 12).map((t) => (
-                <MediaCard
-                  key={t.id}
-                  to="/collection/$type/$id"
-                  params={{ type: "favorites", id: "all" }}
-                  title={t.title}
-                  subtitle={t.artist}
-                  artwork={t.artwork}
-                />
-              ))}
-            </Shelf>
-          )}
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl aurora-bg text-primary-foreground">
+                <Search className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">Search millions of songs online</p>
+                <p className="text-xs text-muted-foreground">
+                  YouTube smart browser · playlists · personal history
+                </p>
+              </div>
+            </Link>
+          </section>
 
-          {albums.length > 0 && (
-            <Shelf
-              title="Albums"
-              action={<SectionLink label="Albums" />}
-            >
-              {albums.map((a) => (
-                <MediaCard
-                  key={a.id}
-                  to="/album/$id"
-                  params={{ id: a.id }}
-                  title={a.name}
-                  subtitle={a.artist}
-                  artwork={a.artwork}
-                />
-              ))}
-            </Shelf>
-          )}
+          {onlinePicks.length > 0 && <OnlineShelf tracks={onlinePicks} onPlay={startOnline} />}
 
-          {artists.length > 0 && (
-            <Shelf title="Artists">
-              {artists.map((a) => (
-                <MediaCard
-                  key={a.id}
-                  to="/collection/$type/$id"
-                  params={{ type: "artist", id: a.id }}
-                  title={a.name}
-                  subtitle={a.subtitle}
-                  artwork={a.artwork}
-                  round
-                />
-              ))}
-            </Shelf>
-          )}
+          {tracks.length === 0 ? (
+            <EmptyLibrary />
+          ) : (
+            <>
+              {/* Continue listening */}
+              {resume && (
+                <section className="px-4">
+                  <h2 className="mb-3 text-lg font-bold font-display">Continue listening</h2>
+                  <button
+                    onClick={() => {
+                      if (currentId) setPlayerOpen(true);
+                      else playContext([resume.id]);
+                    }}
+                    className="glass flex w-full items-center gap-4 rounded-2xl p-3 text-left transition-transform active:scale-[0.98]"
+                  >
+                    <Artwork src={resume.artwork} className="h-20 w-20" rounded="rounded-xl" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-semibold">{resume.title}</p>
+                      <p className="truncate text-sm text-muted-foreground">{resume.artist}</p>
+                    </div>
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full aurora-bg text-primary-foreground shadow">
+                      <Play className="ml-0.5 h-6 w-6" fill="currentColor" />
+                    </span>
+                  </button>
+                </section>
+              )}
 
-          {genres.length > 0 && (
-            <Shelf title="Genres">
-              {genres.map((g) => (
-                <MediaCard
-                  key={g.id}
-                  to="/collection/$type/$id"
-                  params={{ type: "genre", id: g.id }}
-                  title={g.name}
-                  subtitle={g.subtitle}
-                  artwork={g.artwork}
-                />
-              ))}
-            </Shelf>
+              {/* Quick access tiles */}
+              <div className="grid grid-cols-2 gap-3 px-4">
+                <QuickTile to="/library" icon={Clock} label="Recently added" tint="recent" />
+                <QuickTile to="/playlists" icon={Heart} label="Favorites" tint="fav" search />
+              </div>
+
+              {recent.length > 0 && (
+                <Shelf title="Recently played">
+                  {recent.slice(0, 12).map((t) => (
+                    <MediaCard
+                      key={t.id}
+                      to="/album/$id"
+                      params={{
+                        id: getAlbums(tracks).find((a) => a.trackIds.includes(t.id))?.id ?? "",
+                      }}
+                      title={t.title}
+                      subtitle={t.artist}
+                      artwork={t.artwork}
+                    />
+                  ))}
+                </Shelf>
+              )}
+
+              {most.length > 0 && (
+                <Shelf title="Most played">
+                  {most.slice(0, 12).map((t) => (
+                    <MediaCard
+                      key={t.id}
+                      to="/collection/$type/$id"
+                      params={{ type: "most", id: "all" }}
+                      title={t.title}
+                      subtitle={`${stats[t.id]?.count ?? 0} plays`}
+                      artwork={t.artwork}
+                    />
+                  ))}
+                </Shelf>
+              )}
+
+              {favTracks.length > 0 && (
+                <Shelf
+                  title="Favorites"
+                  action={
+                    <Link
+                      to="/collection/$type/$id"
+                      params={{ type: "favorites", id: "all" }}
+                      className="text-xs font-medium text-primary"
+                    >
+                      See all
+                    </Link>
+                  }
+                >
+                  {favTracks.slice(0, 12).map((t) => (
+                    <MediaCard
+                      key={t.id}
+                      to="/collection/$type/$id"
+                      params={{ type: "favorites", id: "all" }}
+                      title={t.title}
+                      subtitle={t.artist}
+                      artwork={t.artwork}
+                    />
+                  ))}
+                </Shelf>
+              )}
+
+              {albums.length > 0 && (
+                <Shelf title="Albums" action={<SectionLink label="Albums" />}>
+                  {albums.map((a) => (
+                    <MediaCard
+                      key={a.id}
+                      to="/album/$id"
+                      params={{ id: a.id }}
+                      title={a.name}
+                      subtitle={a.artist}
+                      artwork={a.artwork}
+                    />
+                  ))}
+                </Shelf>
+              )}
+
+              {artists.length > 0 && (
+                <Shelf title="Artists">
+                  {artists.map((a) => (
+                    <MediaCard
+                      key={a.id}
+                      to="/collection/$type/$id"
+                      params={{ type: "artist", id: a.id }}
+                      title={a.name}
+                      subtitle={a.subtitle}
+                      artwork={a.artwork}
+                      round
+                    />
+                  ))}
+                </Shelf>
+              )}
+
+              {genres.length > 0 && (
+                <Shelf title="Genres">
+                  {genres.map((g) => (
+                    <MediaCard
+                      key={g.id}
+                      to="/collection/$type/$id"
+                      params={{ type: "genre", id: g.id }}
+                      title={g.name}
+                      subtitle={g.subtitle}
+                      artwork={g.artwork}
+                    />
+                  ))}
+                </Shelf>
+              )}
+            </>
           )}
         </>
       )}
     </div>
+  );
+}
+
+function OnlineShelf({
+  tracks,
+  onPlay,
+}: {
+  tracks: OnlineTrack[];
+  onPlay: (track: OnlineTrack) => void;
+}) {
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between px-4">
+        <h2 className="flex items-center gap-2 text-lg font-bold font-display">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Your online rotation
+        </h2>
+        <Link to="/search" className="text-xs font-medium text-primary">
+          See all
+        </Link>
+      </div>
+      <div className="no-scrollbar flex gap-3 overflow-x-auto px-4 pb-1">
+        {tracks.map((track) => (
+          <button
+            key={track.videoId}
+            type="button"
+            onClick={() => onPlay(track)}
+            className="w-36 shrink-0 text-left"
+          >
+            <span className="relative block aspect-video overflow-hidden rounded-xl bg-muted">
+              <img
+                src={track.artwork}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                <Play className="h-6 w-6 text-white" fill="currentColor" />
+              </span>
+            </span>
+            <span className="mt-1.5 block truncate text-sm font-medium">{track.title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{track.artist}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -249,4 +342,3 @@ function QuickTile({
     </Link>
   );
 }
-

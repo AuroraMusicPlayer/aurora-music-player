@@ -2,14 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Search as SearchIcon, X } from "lucide-react";
 import { usePlayer } from "@/store/player";
-import {
-  byIds,
-  getAlbums,
-  getArtists,
-  getFolders,
-  getGenres,
-  searchTracks,
-} from "@/lib/selectors";
+import { byIds, getAlbums, getArtists, getFolders, getGenres, searchTracks } from "@/lib/selectors";
 import { TrackRow } from "@/components/TrackRow";
 import { MediaCard } from "@/components/MediaCard";
 import { Shelf } from "@/components/Shelf";
@@ -51,7 +44,7 @@ function SearchPage() {
     results.playlists.length === 0;
 
   return (
-    <Tabs defaultValue="library" className="flex flex-col">
+    <Tabs defaultValue={tracks.length === 0 ? "youtube" : "library"} className="flex flex-col">
       <header className="sticky top-0 z-10 bg-background/80 px-4 pb-2 pt-6 backdrop-blur-xl space-y-3">
         <h1 className="text-2xl font-extrabold font-display">Search</h1>
         <TabsList className="grid w-full grid-cols-2">
@@ -86,9 +79,7 @@ function SearchPage() {
           </p>
         )}
 
-        {empty && (
-          <p className="px-4 text-sm text-muted-foreground">No results for "{q}".</p>
-        )}
+        {empty && <p className="px-4 text-sm text-muted-foreground">No results for "{q}".</p>}
 
         {results && results.artists.length > 0 && (
           <Shelf title="Artists">
