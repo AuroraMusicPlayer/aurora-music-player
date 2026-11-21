@@ -170,6 +170,22 @@ class Library {
     return rows.map(Track.fromRow).toList(growable: false);
   }
 
+  /// Tracks you liked once but have not touched in [days] — the cheapest real
+  /// recommendation the app can make, because it needs no network at all.
+  Future<List<Track>> worthAnotherListen({int limit = 12, int days = 7}) async {
+    final cutoff = DateTime.now()
+        .subtract(Duration(days: days))
+        .millisecondsSinceEpoch;
+    final rows = await _db.query(
+      'tracks',
+      where: 'play_count > 0 AND last_played IS NOT NULL AND last_played < ?',
+      whereArgs: [cutoff],
+      orderBy: 'play_count DESC, last_played ASC',
+      limit: limit,
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
   /// Artists ranked by total plays — the seed for "Because you played…".
   Future<List<String>> topArtists({int limit = 5, int minPlays = 1}) async {
     final rows = await _db.rawQuery('''

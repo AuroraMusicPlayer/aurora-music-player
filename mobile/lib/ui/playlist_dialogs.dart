@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import '../data/playlist_import.dart';
+import '../data/youtube_source.dart';
 import 'playlist_screen.dart';
 
 /// Add-to-playlist sheet, with inline creation so the flow never dead-ends.
@@ -95,15 +99,17 @@ Future<String?> _askName(BuildContext context, {String suggested = ''}) {
   );
 }
 
-/// Paste a YouTube playlist link and import it read-only into the library.
+/// Import songs from a Spotify link, a YouTube playlist link, or a pasted list.
+///
+/// Spotify and pasted lists only give us names, so each song is matched with a
+/// YouTube search — throttled, capped, and cancellable.
 Future<void> showImportPlaylist(
   BuildContext context,
   AppServices services,
 ) async {
   final controller = TextEditingController();
-  final messenger = ScaffoldMessenger.of(context);
 
-  final url = await showDialog<String>(
+  final input = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Import a playlist'),
@@ -111,17 +117,20 @@ Future<void> showImportPlaylist(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'Paste a YouTube playlist link (…&list=…). Spotify links need an '
-            'account connection, which this build does not have yet.',
+            'Paste a Spotify playlist link, a YouTube playlist link, or a list '
+            'of songs (one per line as "Artist - Title").',
             style: TextStyle(fontSize: 12, color: Colors.white54),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
             autofocus: true,
+            maxLines: 6,
+            minLines: 2,
             decoration: const InputDecoration(
-              labelText: 'Playlist link',
-              hintText: 'https://youtube.com/playlist?list=…',
+              labelText: 'Link or song list',
+              hintText: 'https://open.spotify.com/playlist/…',
+              border: OutlineInputBorder(),
             ),
           ),
         ],
@@ -136,35 +145,102 @@ Future<void> showImportPlaylist(
     ),
   );
 
-  if (url == null || url.isEmpty) return;
+  if (input == null || input.isEmpty) return;
 
-  messenger.showSnackBar(
-    const SnackBar(content: Text('Reading playlist… this can take a moment')),
-  );
+  final navigator = Navigator.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  final reader = PlaylistReader();
+  final cancelled = <bool>[false];
+  final status = ValueNotifier<String>('Reading playlist…');
+
+  unawaited(showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Importing'),
+      content: ValueListenableBuilder<String>(
+        valueListenable: status,
+        builder: (context, value, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value, style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            cancelled[0] = true;
+            Navigator.pop(dialogContext);
+          },
+          child: const Text('Stop'),
+        ),
+      ],
+    ),
+  ));
 
   try {
-    final imported = await services.source.fetchPlaylist(url);
-    for (final track in imported.tracks) {
+    late final String name;
+    late final List<Track> tracks;
+
+    if (reader.looksLikeSpotify(input)) {
+      final candidate = await reader.fromSpotify(input);
+      name = candidate.name;
+      tracks = await reader.match(
+        candidate.entries,
+        services.source,
+        onProgress: (done, total) =>
+            status.value = 'Finding songs on YouTube: $done of $total',
+        isCancelled: () => cancelled[0],
+      );
+    } else if (input.contains('list=') || input.contains('youtube.com/playlist')) {
+      final imported = await services.source.fetchPlaylist(input);
+      name = imported.name;
+      tracks = imported.tracks;
+    } else {
+      final candidate = reader.fromText(input);
+      name = candidate.name;
+      tracks = await reader.match(
+        candidate.entries,
+        services.source,
+        onProgress: (done, total) =>
+            status.value = 'Finding songs on YouTube: $done of $total',
+        isCancelled: () => cancelled[0],
+      );
+    }
+
+    if (tracks.isEmpty) {
+      throw const YouTubeSourceException('Nothing could be matched to YouTube');
+    }
+
+    for (final track in tracks) {
       await services.library.remember(track);
     }
-    final id = await services.library.createPlaylistWithTracks(
-      imported.name,
-      imported.tracks,
-    );
+    final id = await services.library.createPlaylistWithTracks(name, tracks);
     services.events.bump();
 
-    if (!context.mounted) return;
-    final playlist = (await services.library.playlists())
-        .firstWhere((p) => p.id == id, orElse: () => throw StateError('missing'));
+    navigator.pop(); // progress dialog
     messenger.showSnackBar(
-      SnackBar(content: Text('Imported ${imported.tracks.length} songs')),
+      SnackBar(content: Text('Imported ${tracks.length} of ${name}')),
     );
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PlaylistScreen(services: services, playlist: playlist),
-      ),
-    );
+
+    final playlist = (await services.library.playlists())
+        .where((p) => p.id == id)
+        .firstOrNull;
+    if (playlist != null) {
+      await navigator.push(
+        MaterialPageRoute(
+          builder: (_) => PlaylistScreen(services: services, playlist: playlist),
+        ),
+      );
+    }
   } catch (error) {
+    navigator.pop(); // progress dialog
     messenger.showSnackBar(SnackBar(content: Text('$error')));
+  } finally {
+    reader.dispose();
   }
 }

@@ -67,6 +67,16 @@ class Recommendations {
       shelves.add(HomeShelf(title: 'Heavy rotation', tracks: played));
     }
 
+    // Local-only suggestion: no request, so it is safe to compute every load.
+    final forgotten = await library.worthAnotherListen(limit: 12);
+    if (forgotten.isNotEmpty) {
+      shelves.add(HomeShelf(
+        title: 'Worth another listen',
+        subtitle: 'You liked these, then stopped playing them',
+        tracks: forgotten,
+      ));
+    }
+
     final known = {
       ...played.map((t) => t.id),
       ...recent.map((t) => t.id),
