@@ -40,6 +40,32 @@ void main() {
     });
   });
 
+  group('long listen', () {
+    test('one near-complete listen is enough, even with no repeats', () {
+      const policy = AutoCachePolicy(threshold: 2);
+      expect(policy.shouldCacheOnLongListen(track(plays: 0)), isTrue);
+    });
+
+    test('respects the auto-cache switch', () {
+      const policy = AutoCachePolicy(enabled: false, threshold: 2);
+      expect(policy.shouldCacheOnLongListen(track(plays: 0)), isFalse);
+      expect(policy.shouldCacheOnLongListen(track(favorite: true)), isTrue);
+    });
+
+    test('never re-caches something already cached', () {
+      const policy = AutoCachePolicy(threshold: 2);
+      expect(policy.shouldCacheOnLongListen(track(audioPath: '/x.mp4')), isFalse);
+    });
+
+    test('long uploads still need a manual save', () {
+      const policy = AutoCachePolicy(threshold: 2);
+      expect(
+        policy.shouldCacheOnLongListen(track(duration: 45 * 60)),
+        isFalse,
+      );
+    });
+  });
+
   group('auto cache decision', () {
     test('does nothing before the threshold', () {
       const policy = AutoCachePolicy(threshold: 2);

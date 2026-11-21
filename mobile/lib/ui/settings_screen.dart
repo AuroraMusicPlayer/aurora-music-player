@@ -63,8 +63,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SwitchListTile(
                 title: const Text('Save tracks I replay'),
                 subtitle: Text(
-                  'Keeps a copy on this device once a track reaches '
-                  '${settings.autoCacheThreshold} play${settings.autoCacheThreshold == 1 ? '' : 's'}.',
+                  'Saves a track when you replay it '
+                  '${settings.autoCacheThreshold}× — or when you listen almost all '
+                  'the way through it once.',
                 ),
                 value: settings.autoCacheEnabled,
                 onChanged: (value) => settings.autoCacheEnabled = value,

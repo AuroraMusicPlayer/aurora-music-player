@@ -35,6 +35,21 @@ class AutoCachePolicy {
     return true;
   }
 
+  /// The second way a track earns its place, closer to how YouTube Music
+  /// behaves: if you listen to almost all of it, one listen is enough.
+  ///
+  /// Play-count thresholding rewards repetition; this rewards intent. A track
+  /// you sat through once is something you wanted to hear.
+  bool shouldCacheOnLongListen(Track track) {
+    if (track.isCached) return false;
+    if (track.favorite) return true;
+    if (!enabled) return false;
+
+    final seconds = track.duration;
+    if (seconds != null && seconds > maxDuration.inSeconds) return false;
+    return true;
+  }
+
   /// A play only counts once playback reaches the shorter of 30s or half the
   /// track, the same convention streaming apps use. Anything switched away
   /// from before that is a skip.

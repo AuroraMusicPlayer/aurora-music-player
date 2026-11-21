@@ -74,7 +74,9 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     }
 
     _appended = 0;
-    queue.add([_mediaItem(_queue.first)]);
+    _queue[0] = await library.byId(_queue[0].id) ?? _queue[0];
+    mediaItem.add(_mediaItem(_queue[0]));
+    queue.add([_mediaItem(_queue[0])]);
 
     try {
       final first = await _audioSource(_queue.first);
@@ -158,6 +160,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   Track? _active;
   bool _activeCounted = false;
   bool _activeStarted = false;
+  bool _longListenHandled = false;
 
   void _onIndexChanged(int? index) {
     final previous = _active;
@@ -167,6 +170,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
     _activeCounted = false;
     _activeStarted = false;
+    _longListenHandled = false;
 
     if (index == null || index < 0 || index >= _queue.length) {
       _active = null;
@@ -176,6 +180,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
     _active = _queue[index];
     activeTrack.value = _active;
+    mediaItem.add(_mediaItem(_active!));
     _refreshActive();
   }
 
@@ -186,6 +191,15 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (!_activeStarted && position > const Duration(seconds: 1)) {
       _activeStarted = true;
     }
+    // "Played right through" is a stronger signal than "tapped twice".
+    if (!_longListenHandled && track.duration != null && track.duration! > 0) {
+      final fraction = position.inSeconds / track.duration!;
+      if (fraction >= 0.8) {
+        _longListenHandled = true;
+        _maybeAutoCache(track, longListen: true);
+      }
+    }
+
     if (_activeCounted || !_activeStarted) return;
     if (position < AutoCachePolicy.qualifiedAfter(track)) return;
 
@@ -210,13 +224,16 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (_active?.id == fresh.id) {
       _active = fresh;
       activeTrack.value = fresh;
+      mediaItem.add(_mediaItem(fresh));
     }
   }
 
   /// This is the feature: repeated listening earns an offline copy.
-  Future<void> _maybeAutoCache(Track track) async {
+  Future<void> _maybeAutoCache(Track track, {bool longListen = false}) async {
     final fresh = await library.byId(track.id) ?? track;
-    if (!policy.shouldCache(fresh)) return;
+    final wanted =
+        longListen ? policy.shouldCacheOnLongListen(fresh) : policy.shouldCache(fresh);
+    if (!wanted) return;
 
     unawaited(
       cache.download(fresh, origin: fresh.favorite ? 'manual' : 'auto').then((updated) {
