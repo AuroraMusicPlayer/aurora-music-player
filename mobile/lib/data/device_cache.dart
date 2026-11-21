@@ -68,7 +68,7 @@ class DeviceCache {
       if (await library.byId(track.id) == null) await library.remember(track);
 
       final dir = await _audioDir();
-      final target = File(p.join(dir.path, '${track.id}.m4a'));
+      final target = File(p.join(dir.path, '${track.id}.mp4'));
       partial = File('${target.path}.part');
 
       final resolved = await source.stream(track.id);

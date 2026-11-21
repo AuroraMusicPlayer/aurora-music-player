@@ -131,6 +131,33 @@ class Library {
     return rows.map(Track.fromRow).toList(growable: false);
   }
 
+  /// Most played first, for the home feed.
+  Future<List<Track>> mostPlayed({int limit = 25}) async {
+    final rows = await _db.query(
+      'tracks',
+      where: 'play_count > 0',
+      orderBy: 'play_count DESC, last_played DESC',
+      limit: limit,
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  /// Artists ranked by total plays — the seed for "Because you played…".
+  Future<List<String>> topArtists({int limit = 5, int minPlays = 1}) async {
+    final rows = await _db.rawQuery('''
+      SELECT artist, SUM(play_count) AS plays
+      FROM tracks
+      WHERE play_count >= ?
+      GROUP BY artist
+      ORDER BY plays DESC
+      LIMIT ?
+    ''', [minPlays, limit]);
+    return rows
+        .map((r) => (r['artist'] as String?) ?? '')
+        .where((a) => a.isNotEmpty && a != 'Unknown artist')
+        .toList(growable: false);
+  }
+
   Future<int> cachedBytes() async {
     final result = await _db.rawQuery(
         'SELECT COALESCE(SUM(bytes), 0) AS total FROM tracks WHERE audio_path IS NOT NULL');

@@ -53,7 +53,13 @@ class YouTubeSource {
     return tracks;
   }
 
-  /// Resolve (and memoise) the audio URL for a video id.
+  /// Resolve (and memoise) a playable URL for a video id.
+  ///
+  /// Only the **progressive (muxed) stream** is used. Audio-only streams are
+  /// DASH fragments (`ftypdash`) which AVFoundation refuses to play over HTTP
+  /// and which YouTube answers with 403 for client-side requests. The muxed
+  /// stream is a plain `ftypmp42` MP4 that both AVPlayer and ExoPlayer handle,
+  /// at the cost of carrying a 360p video track alongside the audio.
   Future<ResolvedStream> stream(String videoId) async {
     final cached = _urls[videoId];
     if (cached != null && !cached.isStale) return cached;
@@ -62,18 +68,17 @@ class YouTubeSource {
         .getManifest(videoId)
         .timeout(const Duration(seconds: 30));
 
-    // iOS can only play AAC in an MP4 container, so prefer itag 140 (128k m4a)
-    // over the higher-bitrate Opus streams.
-    final mp4 = manifest.audioOnly
-        .where((s) => s.container == StreamContainer.mp4)
-        .toList()
-      ..sort((a, b) => a.bitrate.bitsPerSecond.compareTo(b.bitrate.bitsPerSecond));
+    // Smallest progressive stream first: same container, less video to fetch.
+    final progressive = manifest.muxed.toList()
+      ..sort((a, b) => a.size.totalBytes.compareTo(b.size.totalBytes));
 
-    if (mp4.isEmpty && manifest.audioOnly.isEmpty) {
-      throw const YouTubeSourceException('No audio stream for that video');
+    if (progressive.isEmpty) {
+      throw const YouTubeSourceException(
+        'No progressive stream for that video — try another upload',
+      );
     }
 
-    final stream = mp4.isNotEmpty ? mp4.last : manifest.audioOnly.last;
+    final stream = progressive.first;
     final resolved = ResolvedStream(
       url: stream.url.toString(),
       bytes: stream.size.totalBytes,
