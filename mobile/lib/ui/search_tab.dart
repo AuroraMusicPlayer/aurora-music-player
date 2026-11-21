@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'playlist_dialogs.dart';
 
 class SearchTab extends StatefulWidget {
   const SearchTab({super.key, required this.services});
@@ -66,6 +67,78 @@ class _SearchTabState extends State<SearchTab> {
         _error = '$error';
       });
     }
+  }
+
+  /// Long-press menu: like, download, add to playlist — the three things you
+  /// want from a search result without opening the player.
+  Future<void> _showActions(Track track) async {
+    final services = widget.services;
+    final stored = await services.library.byId(track.id) ?? track;
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF141414),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(track.artist, maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(
+                stored.favorite ? Icons.favorite : Icons.favorite_border,
+                color: stored.favorite ? Colors.redAccent : null,
+              ),
+              title: Text(stored.favorite ? 'Remove from liked songs' : 'Like'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await services.library.setFavorite(track.id, !stored.favorite);
+                if (!stored.favorite) {
+                  // Liking implies keeping it offline.
+                  await services.cache
+                      .download(stored, origin: 'manual')
+                      .catchError((Object _) => null);
+                }
+                services.events.bump();
+                await _refreshCached();
+              },
+            ),
+            ListTile(
+              leading: Icon(stored.isCached
+                  ? Icons.offline_pin
+                  : Icons.download_outlined),
+              title: Text(stored.isCached ? 'Remove download' : 'Download'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                if (stored.isCached) {
+                  await services.cache.remove(stored);
+                  await _refreshCached();
+                } else {
+                  await _download(track);
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.playlist_add),
+              title: const Text('Add to playlist'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await services.library.remember(track);
+                if (!context.mounted) return;
+                await showAddToPlaylist(context, services, track);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _download(Track track) async {
@@ -168,7 +241,7 @@ class _SearchTabState extends State<SearchTab> {
               downloading: downloading.contains(track.id),
               onTap: () => widget.services.handler
                   .playTracks(_results, startIndex: index),
-              onLongPress: () => _download(track),
+              onLongPress: () => _showActions(track),
               onDownload: () => _download(track),
             );
           },

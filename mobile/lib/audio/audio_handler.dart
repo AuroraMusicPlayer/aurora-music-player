@@ -154,6 +154,33 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
+  /// Heart / un-heart the current track. Favourites are also cached, because
+  /// liking something is the clearest possible signal that it should be
+  /// available offline.
+  Future<void> toggleFavorite() async {
+    final track = _active;
+    if (track == null) return;
+
+    final next = !track.favorite;
+    await library.setFavorite(track.id, next);
+    events.bump();
+    await _refreshActive();
+
+    if (next) {
+      final fresh = await library.byId(track.id);
+      if (fresh != null) {
+        unawaited(
+          cache.download(fresh, origin: 'manual').then((updated) {
+            if (updated != null) {
+              _replaceInQueue(updated);
+              events.bump();
+            }
+          }).catchError((Object _) {}),
+        );
+      }
+    }
+  }
+
   /// Off → all → one → off, the usual three-state repeat button.
   Future<void> cycleRepeat() async {
     final next = switch (_player.loopMode) {

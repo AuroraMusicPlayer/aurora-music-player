@@ -207,6 +207,14 @@ class _Actions extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+        IconButton(
+          tooltip: track.favorite ? 'Remove from liked' : 'Like',
+          onPressed: services.handler.toggleFavorite,
+          icon: Icon(
+            track.favorite ? Icons.favorite : Icons.favorite_border,
+            color: track.favorite ? Colors.redAccent : Colors.white70,
+          ),
+        ),
         TextButton.icon(
           onPressed: () => showAddToPlaylist(context, services, track),
           icon: const Icon(Icons.playlist_add, size: 18),

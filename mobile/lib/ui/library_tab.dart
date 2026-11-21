@@ -4,8 +4,9 @@ import '../app.dart';
 import '../data/models.dart';
 import 'playlist_dialogs.dart';
 import 'playlist_screen.dart';
+import 'track_list_screen.dart';
 
-/// Playlists and everything stored on the device.
+/// Playlists, liked songs and everything stored on the device.
 class LibraryTab extends StatefulWidget {
   const LibraryTab({super.key, required this.services});
 
@@ -16,9 +17,13 @@ class LibraryTab extends StatefulWidget {
 }
 
 class _LibraryTabState extends State<LibraryTab> {
-  List<Track> _cached = const [];
   List<Playlist> _playlists = const [];
-  int _bytes = 0;
+  int _liked = 0;
+  int _autoCount = 0;
+  int _autoBytes = 0;
+  int _manualCount = 0;
+  int _manualBytes = 0;
+  List<Track> _recentAuto = const [];
 
   @override
   void initState() {
@@ -34,14 +39,24 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 
   Future<void> _load() async {
-    final cached = await widget.services.library.cached();
-    final playlists = await widget.services.library.playlists();
-    final bytes = await widget.services.library.cachedBytes();
+    final library = widget.services.library;
+    final playlists = await library.playlists();
+    final liked = await library.favoriteCount();
+    final auto = await library.offline(origin: 'auto');
+    final manual = await library.offline(origin: 'manual');
+
+    int bytesOf(List<Track> tracks) =>
+        tracks.fold<int>(0, (sum, t) => sum + t.bytes);
+
     if (!mounted) return;
     setState(() {
-      _cached = cached;
       _playlists = playlists;
-      _bytes = bytes;
+      _liked = liked;
+      _autoCount = auto.length;
+      _autoBytes = bytesOf(auto);
+      _manualCount = manual.length;
+      _manualBytes = bytesOf(manual);
+      _recentAuto = auto.take(6).toList(growable: false);
     });
   }
 
@@ -70,10 +85,13 @@ class _LibraryTabState extends State<LibraryTab> {
     await _load();
   }
 
+  void _open(TrackListScreen screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final usedMb = _bytes / (1024 * 1024);
-    final budgetGb = widget.services.settings.cacheBudgetGb;
+    final services = widget.services;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -85,7 +103,7 @@ class _LibraryTabState extends State<LibraryTab> {
           IconButton(
             tooltip: 'Import playlist',
             icon: const Icon(Icons.playlist_add),
-            onPressed: () => showImportPlaylist(context, widget.services),
+            onPressed: () => showImportPlaylist(context, services),
           ),
           IconButton(
             tooltip: 'New playlist',
@@ -99,12 +117,75 @@ class _LibraryTabState extends State<LibraryTab> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
+            ListTile(
+              leading: _icon(Icons.favorite, Colors.redAccent),
+              title: const Text('Liked songs'),
+              subtitle: Text('$_liked songs',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Liked songs',
+                showHeart: true,
+                emptyMessage: 'Nothing liked yet.\nTap the heart in the player '
+                    'on a song you love — it is saved offline too.',
+                load: () => services.library.favorites(),
+                onLongPress: (track) async {
+                  await services.library.setFavorite(track.id, false);
+                  services.events.bump();
+                },
+              )),
+            ),
+            ListTile(
+              leading: _icon(Icons.offline_pin, Colors.greenAccent),
+              title: const Text('Offline songs'),
+              subtitle: Text(
+                _autoCount == 0
+                    ? 'Nothing saved automatically yet'
+                    : '$_autoCount songs · ${(_autoBytes / (1024 * 1024)).toStringAsFixed(0)} MB',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Offline songs',
+                showHeart: true,
+                emptyMessage: 'Songs you play twice, or listen through once, '
+                    'are saved here automatically. They play with no network.',
+                load: () => services.library.offline(origin: 'auto'),
+                onLongPress: (track) async {
+                  await services.cache.remove(track);
+                  services.events.bump();
+                },
+              )),
+            ),
+            ListTile(
+              leading: _icon(Icons.download_done, Colors.white70),
+              title: const Text('Downloads'),
+              subtitle: Text(
+                _manualCount == 0
+                    ? 'Nothing downloaded by hand yet'
+                    : '$_manualCount songs · ${(_manualBytes / (1024 * 1024)).toStringAsFixed(0)} MB',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Downloads',
+                showHeart: true,
+                emptyMessage: 'Songs you download yourself appear here. '
+                    'These are never removed automatically.',
+                load: () => services.library.offline(origin: 'manual'),
+                onLongPress: (track) async {
+                  await services.cache.remove(track);
+                  services.events.bump();
+                },
+              )),
+            ),
+
             _sectionHeader(context, 'Playlists', trailing: '${_playlists.length}'),
             if (_playlists.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
-                  'Create one with ＋, or import a YouTube playlist link.',
+                  'Create one with ＋, or import a Spotify or YouTube playlist.',
                   style: TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ),
@@ -114,7 +195,7 @@ class _LibraryTabState extends State<LibraryTab> {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => PlaylistScreen(
-                        services: widget.services,
+                        services: services,
                         playlist: playlist,
                       ),
                     ),
@@ -141,56 +222,51 @@ class _LibraryTabState extends State<LibraryTab> {
                     style: const TextStyle(color: Colors.white54, fontSize: 12)),
               ),
             ),
-            _sectionHeader(
-              context,
-              'Downloaded',
-              trailing: '${usedMb.toStringAsFixed(0)} MB / $budgetGb GB',
-            ),
-            if (_cached.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  'Tracks you replay or listen through are saved automatically. '
-                  'Long-press a search result to save it now.',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ),
-            ..._cached.map(
-              (track) => ListTile(
-                onTap: () => widget.services.handler
-                    .playTracks(_cached, startIndex: _cached.indexOf(track)),
-                onLongPress: () async {
-                  await widget.services.cache.remove(track);
-                  await _load();
-                },
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: SizedBox(
-                    width: 50,
-                    height: 50,
-                    child: track.thumbnail == null
-                        ? const ColoredBox(color: Color(0xFF1E1E1E))
-                        : Image.network(track.thumbnail!, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const ColoredBox(color: Color(0xFF1E1E1E))),
+
+            if (_recentAuto.isNotEmpty) ...[
+              _sectionHeader(context, 'Recently saved'),
+              ..._recentAuto.map(
+                (track) => ListTile(
+                  onTap: () => services.handler.playTracks(_recentAuto,
+                      startIndex: _recentAuto.indexOf(track)),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: track.thumbnail == null
+                          ? const ColoredBox(color: Color(0xFF1E1E1E))
+                          : Image.network(track.thumbnail!, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const ColoredBox(color: Color(0xFF1E1E1E))),
+                    ),
                   ),
+                  title: Text(track.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(track.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  trailing: const Icon(Icons.offline_pin_outlined,
+                      size: 16, color: Colors.greenAccent),
                 ),
-                title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(
-                  '${track.cacheOrigin == 'auto' ? 'Auto' : 'Saved'} · '
-                  '${(track.bytes / (1024 * 1024)).toStringAsFixed(1)} MB · '
-                  'played ${track.playCount}×',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                trailing: const Icon(Icons.offline_pin_outlined,
-                    size: 16, color: Colors.greenAccent),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
   }
+
+  Widget _icon(IconData icon, Color color) => Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(icon, size: 20, color: color),
+      );
 
   Widget _sectionHeader(BuildContext context, String title, {String? trailing}) {
     return Padding(
@@ -198,10 +274,8 @@ class _LibraryTabState extends State<LibraryTab> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            ),
+            child: Text(title,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           ),
           if (trailing != null)
             Text(trailing,

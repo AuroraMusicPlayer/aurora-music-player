@@ -134,6 +134,47 @@ class Library {
     );
   }
 
+  /// Everything you hearted, whether or not it is cached.
+  Future<List<Track>> favorites({int limit = 500}) async {
+    final rows = await _db.query(
+      'tracks',
+      where: 'favorite = 1',
+      orderBy: 'last_played DESC, title ASC',
+      limit: limit,
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  Future<int> favoriteCount() async {
+    final result = await _db
+        .rawQuery('SELECT COUNT(*) AS n FROM tracks WHERE favorite = 1');
+    return (result.first['n'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Cached tracks, optionally filtered by how they got here:
+  /// `auto` (the app decided) or `manual` (you asked).
+  Future<List<Track>> offline({String? origin}) async {
+    final rows = await _db.query(
+      'tracks',
+      where: origin == null
+          ? 'audio_path IS NOT NULL'
+          : 'audio_path IS NOT NULL AND cache_origin = ?',
+      whereArgs: origin == null ? null : [origin],
+      orderBy: 'cached_at DESC',
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  Future<int> offlineBytes({String? origin}) async {
+    final result = await _db.rawQuery(
+      origin == null
+          ? 'SELECT COALESCE(SUM(bytes),0) AS total FROM tracks WHERE audio_path IS NOT NULL'
+          : 'SELECT COALESCE(SUM(bytes),0) AS total FROM tracks WHERE audio_path IS NOT NULL AND cache_origin = ?',
+      origin == null ? null : [origin],
+    );
+    return (result.first['total'] as num?)?.toInt() ?? 0;
+  }
+
   Future<List<Track>> cached() async {
     final rows = await _db.query('tracks',
         where: 'audio_path IS NOT NULL', orderBy: 'last_played DESC');
