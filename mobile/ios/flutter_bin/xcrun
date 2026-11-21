@@ -1,0 +1,13 @@
+#!/bin/sh
+# Flutter's native-asset hooks run with a scrubbed environment: DEVELOPER_DIR
+# is stripped, but PATH survives. On machines where `xcode-select` still points
+# at Command Line Tools, `xcrun --show-sdk-path --sdk iphoneos` then returns
+# nothing and the objective_c hook dies with "Bad state: No element".
+#
+# This shim makes xcrun resolve against Xcode regardless of the active
+# developer directory, and is a no-op on machines without Xcode installed.
+if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+  export DEVELOPER_DIR
+fi
+exec /usr/bin/xcrun "$@"
