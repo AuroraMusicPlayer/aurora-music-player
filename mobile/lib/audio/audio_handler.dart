@@ -332,16 +332,89 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     }
   }
 
+  /* ---------------------- Android Auto / car browsing -------------------- */
+
+  static const browseRoot = 'aurora_root';
+  static const browseLiked = 'liked';
+  static const browseOffline = 'offline';
+  static const browseRecent = 'recent';
+  static const browseRotation = 'rotation';
+  static const _playlistPrefix = 'playlist:';
+
+  /// The tree a head unit browses. Without this Android Auto shows the app but
+  /// nothing inside it.
+  @override
+  Future<List<MediaItem>> getChildren(
+    String parentMediaId, [
+    Map<String, dynamic>? options,
+  ]) async {
+    if (parentMediaId == AudioService.browsableRootId ||
+        parentMediaId == browseRoot) {
+      final playlists = await library.playlists();
+      return [
+        MediaItem(id: browseLiked, title: 'Liked songs', playable: false),
+        MediaItem(id: browseOffline, title: 'Offline songs', playable: false),
+        MediaItem(id: browseRecent, title: 'Recently played', playable: false),
+        MediaItem(id: browseRotation, title: 'Heavy rotation', playable: false),
+        for (final playlist in playlists)
+          MediaItem(
+            id: '$_playlistPrefix${playlist.id}',
+            title: playlist.name,
+            playable: false,
+          ),
+      ];
+    }
+
+    final tracks = await _tracksFor(parentMediaId);
+    return [for (final track in tracks) _mediaItem(track, parent: parentMediaId)];
+  }
+
+  @override
+  Future<MediaItem?> getMediaItem(String mediaId) async {
+    final track = await library.byId(mediaId);
+    return track == null ? null : _mediaItem(track);
+  }
+
+  @override
+  Future<void> playFromMediaId(
+    String mediaId, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    final parent = extras?['parent'] as String? ?? browseRecent;
+    final tracks = await _tracksFor(parent);
+    if (tracks.isEmpty) return;
+
+    final index = tracks.indexWhere((t) => t.id == mediaId);
+    await playTracks(tracks, startIndex: index < 0 ? 0 : index);
+  }
+
+  Future<List<Track>> _tracksFor(String parent) async {
+    if (parent.startsWith(_playlistPrefix)) {
+      final id = int.tryParse(parent.substring(_playlistPrefix.length));
+      if (id == null) return const [];
+      return library.playlistTracks(id);
+    }
+    return switch (parent) {
+      browseLiked => library.favorites(),
+      browseOffline => library.offline(origin: 'auto'),
+      browseRotation => library.mostPlayed(),
+      _ => library.recent(),
+    };
+  }
+
   /* --------------------------- audio_service ---------------------------- */
 
-  MediaItem _mediaItem(Track track) => MediaItem(
+  MediaItem _mediaItem(Track track, {String? parent}) => MediaItem(
         id: track.id,
         title: track.title,
         artist: track.artist,
         album: track.album,
         duration: track.length,
         artUri: track.thumbnail == null ? null : Uri.tryParse(track.thumbnail!),
-        extras: {'cached': track.isCached},
+        extras: {
+          'cached': track.isCached,
+          if (parent != null) 'parent': parent,
+        },
       );
 
   void _broadcastState(PlaybackEvent event) {
