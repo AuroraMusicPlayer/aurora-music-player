@@ -20,6 +20,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Resolver cache (audio files + metadata)
+server/data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

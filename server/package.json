@@ -1,0 +1,14 @@
+{
+  "name": "aurora-resolver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local YouTube audio resolver + cache for the Aurora Music app. Personal use only.",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "dev": "node --watch src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
