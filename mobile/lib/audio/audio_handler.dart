@@ -154,6 +154,20 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
+  /// Off → all → one → off, the usual three-state repeat button.
+  Future<void> cycleRepeat() async {
+    final next = switch (_player.loopMode) {
+      LoopMode.off => LoopMode.all,
+      LoopMode.all => LoopMode.one,
+      LoopMode.one => LoopMode.off,
+    };
+    await _player.setLoopMode(next);
+  }
+
+  Future<void> toggleShuffle() async {
+    await _player.setShuffleModeEnabled(!_player.shuffleModeEnabled);
+  }
+
   @override
   Future<void> skipToNext() async {
     if (_player.hasNext) await _player.seekToNext();
@@ -323,6 +337,14 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       bufferedPosition: _player.bufferedPosition,
       speed: _player.speed,
       queueIndex: _player.currentIndex,
+      repeatMode: switch (_player.loopMode) {
+        LoopMode.one => AudioServiceRepeatMode.one,
+        LoopMode.all => AudioServiceRepeatMode.all,
+        LoopMode.off => AudioServiceRepeatMode.none,
+      },
+      shuffleMode: _player.shuffleModeEnabled
+          ? AudioServiceShuffleMode.all
+          : AudioServiceShuffleMode.none,
     ));
   }
 

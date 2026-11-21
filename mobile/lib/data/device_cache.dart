@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -30,7 +31,19 @@ class DeviceCache {
 
   final Set<String> _downloading = {};
 
+  /// Lets the UI show a spinner on the track being saved.
+  final ValueNotifier<Set<String>> downloading = ValueNotifier<Set<String>>({});
+
   bool isDownloading(String id) => _downloading.contains(id);
+
+  void _setDownloading(String id, bool active) {
+    if (active) {
+      _downloading.add(id);
+    } else {
+      _downloading.remove(id);
+    }
+    downloading.value = {..._downloading};
+  }
 
   Future<Directory> _audioDir() async {
     final base = await getApplicationSupportDirectory();
@@ -62,7 +75,7 @@ class DeviceCache {
     if (_downloading.contains(track.id)) return null;
     if (!force && !await _networkAllowsDownload()) return null;
 
-    _downloading.add(track.id);
+    _setDownloading(track.id, true);
     File? partial;
     try {
       if (await library.byId(track.id) == null) await library.remember(track);
@@ -99,7 +112,7 @@ class DeviceCache {
       } catch (_) {}
       rethrow;
     } finally {
-      _downloading.remove(track.id);
+      _setDownloading(track.id, false);
     }
   }
 
@@ -165,5 +178,8 @@ class DeviceCache {
 
   Future<int> usageBytes() => library.cachedBytes();
 
-  void dispose() => _client.close(force: true);
+  void dispose() {
+    _client.close(force: true);
+    downloading.dispose();
+  }
 }

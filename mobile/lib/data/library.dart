@@ -14,30 +14,58 @@ class Library {
     final path = p.join(await getDatabasesPath(), 'aurora.db');
     final db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE tracks(
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            artist TEXT NOT NULL,
-            album TEXT,
-            duration INTEGER,
-            thumbnail TEXT,
-            audio_path TEXT,
-            bytes INTEGER NOT NULL DEFAULT 0,
-            cached_at INTEGER,
-            cache_origin TEXT,
-            play_count INTEGER NOT NULL DEFAULT 0,
-            skip_count INTEGER NOT NULL DEFAULT 0,
-            favorite INTEGER NOT NULL DEFAULT 0,
-            last_played INTEGER
-          )
-        ''');
-        await db.execute('CREATE INDEX tracks_last_played ON tracks(last_played DESC)');
+        await _createTracks(db);
+        await _createPlaylists(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) await _createPlaylists(db);
       },
     );
     return Library(db);
+  }
+
+  static Future<void> _createTracks(Database db) async {
+    await db.execute('''
+      CREATE TABLE tracks(
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        artist TEXT NOT NULL,
+        album TEXT,
+        duration INTEGER,
+        thumbnail TEXT,
+        audio_path TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        cached_at INTEGER,
+        cache_origin TEXT,
+        play_count INTEGER NOT NULL DEFAULT 0,
+        skip_count INTEGER NOT NULL DEFAULT 0,
+        favorite INTEGER NOT NULL DEFAULT 0,
+        last_played INTEGER
+      )
+    ''');
+    await db.execute('CREATE INDEX tracks_last_played ON tracks(last_played DESC)');
+  }
+
+  static Future<void> _createPlaylists(Database db) async {
+    await db.execute('''
+      CREATE TABLE playlists(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE playlist_tracks(
+        playlist_id INTEGER NOT NULL,
+        track_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (playlist_id, track_id)
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX playlist_tracks_order ON playlist_tracks(playlist_id, position)');
   }
 
   Future<Track?> byId(String id) async {
@@ -162,6 +190,88 @@ class Library {
     final result = await _db.rawQuery(
         'SELECT COALESCE(SUM(bytes), 0) AS total FROM tracks WHERE audio_path IS NOT NULL');
     return (result.first['total'] as num?)?.toInt() ?? 0;
+  }
+
+  /* ----------------------------- playlists ------------------------------ */
+
+  Future<List<Playlist>> playlists() async {
+    final rows = await _db.rawQuery('''
+      SELECT p.id, p.name, p.created_at,
+             COUNT(pt.track_id) AS track_count,
+             (SELECT t.thumbnail FROM playlist_tracks pt2
+                JOIN tracks t ON t.id = pt2.track_id
+               WHERE pt2.playlist_id = p.id
+               ORDER BY pt2.position LIMIT 1) AS thumbnail
+      FROM playlists p
+      LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+    ''');
+    return rows.map(Playlist.fromRow).toList(growable: false);
+  }
+
+  Future<int> createPlaylist(String name) async {
+    return _db.insert('playlists', {
+      'name': name.trim(),
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> renamePlaylist(int id, String name) async {
+    await _db.update('playlists', {'name': name.trim()},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deletePlaylist(int id) async {
+    await _db.delete('playlist_tracks', where: 'playlist_id = ?', whereArgs: [id]);
+    await _db.delete('playlists', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Track>> playlistTracks(int id) async {
+    final rows = await _db.rawQuery('''
+      SELECT t.* FROM playlist_tracks pt
+      JOIN tracks t ON t.id = pt.track_id
+      WHERE pt.playlist_id = ?
+      ORDER BY pt.position
+    ''', [id]);
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  Future<void> addToPlaylist(int playlistId, String trackId) async {
+    final existing = await _db.query('playlist_tracks',
+        where: 'playlist_id = ? AND track_id = ?',
+        whereArgs: [playlistId, trackId],
+        limit: 1);
+    if (existing.isNotEmpty) return;
+
+    final result = await _db.rawQuery(
+        'SELECT COALESCE(MAX(position), -1) + 1 AS next FROM playlist_tracks WHERE playlist_id = ?',
+        [playlistId]);
+    final next = (result.first['next'] as num?)?.toInt() ?? 0;
+    await _db.insert('playlist_tracks', {
+      'playlist_id': playlistId,
+      'track_id': trackId,
+      'position': next,
+    });
+  }
+
+  Future<void> removeFromPlaylist(int playlistId, String trackId) async {
+    await _db.delete('playlist_tracks',
+        where: 'playlist_id = ? AND track_id = ?',
+        whereArgs: [playlistId, trackId]);
+  }
+
+  /// Creates a playlist from already-remembered tracks (playlist import).
+  Future<int> createPlaylistWithTracks(String name, List<Track> tracks) async {
+    final id = await createPlaylist(name);
+    for (var i = 0; i < tracks.length; i++) {
+      await _db.insert('playlist_tracks', {
+        'playlist_id': id,
+        'track_id': tracks[i].id,
+        'position': i,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    return id;
   }
 
   Future<void> close() => _db.close();

@@ -135,6 +135,58 @@ class YouTubeSource {
     }
   }
 
+  /// Reads a YouTube playlist (public, no sign-in) into tracks.
+  ///
+  /// Capped at [maxTracks] because every page is a request and Google starts
+  /// blocking devices that ask too often.
+  Future<ImportedPlaylist> fetchPlaylist(String input, {int maxTracks = 80}) async {
+    final id = _playlistIdFrom(input);
+    if (id == null) {
+      throw const YouTubeSourceException(
+        'That does not look like a YouTube playlist link',
+      );
+    }
+
+    await _beforeRequest();
+
+    try {
+      final meta = await _yt.playlists
+          .get(id)
+          .timeout(const Duration(seconds: 20));
+
+      final tracks = <Track>[];
+      await for (final video
+          in _yt.playlists.getVideos(id).timeout(const Duration(seconds: 45))) {
+        tracks.add(_toTrack(video));
+        if (tracks.length >= maxTracks) break;
+      }
+
+      if (tracks.isEmpty) {
+        throw const YouTubeSourceException('That playlist has no videos');
+      }
+
+      return ImportedPlaylist(
+        name: meta.title.trim().isEmpty ? 'Imported playlist' : meta.title.trim(),
+        tracks: tracks,
+      );
+    } catch (error) {
+      throw _translate(error);
+    }
+  }
+
+  String? _playlistIdFrom(String input) {
+    final trimmed = input.trim();
+    if (RegExp(r'^[A-Za-z0-9_-]{13,}$').hasMatch(trimmed) && !trimmed.contains('/')) {
+      return trimmed;
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) return null;
+    final list = uri.queryParameters['list'];
+    if (list != null && list.isNotEmpty) return list;
+    if (uri.pathSegments.contains('playlist')) return null;
+    return null;
+  }
+
   /// Called when a URL stops working mid-session (they expire after ~6h).
   void invalidate(String videoId) => _urls.remove(videoId);
 
@@ -210,6 +262,13 @@ class YouTubeSource {
   }
 
   void close() => _yt.close();
+}
+
+class ImportedPlaylist {
+  const ImportedPlaylist({required this.name, required this.tracks});
+
+  final String name;
+  final List<Track> tracks;
 }
 
 class YouTubeSourceException implements Exception {

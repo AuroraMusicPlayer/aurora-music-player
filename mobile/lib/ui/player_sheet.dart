@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'playlist_dialogs.dart';
 
 Future<void> showPlayerSheet(BuildContext context, AppServices services) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
+    backgroundColor: const Color(0xFF101010),
     builder: (_) => PlayerSheet(services: services),
   );
 }
@@ -33,34 +35,41 @@ class PlayerSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(12),
                 child: AspectRatio(
                   aspectRatio: 1,
                   child: track.thumbnail == null
-                      ? const ColoredBox(color: Colors.white12)
-                      : Image.network(track.thumbnail!, fit: BoxFit.cover),
+                      ? const ColoredBox(color: Color(0xFF1E1E1E))
+                      : Image.network(track.thumbnail!, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const ColoredBox(color: Color(0xFF1E1E1E))),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Text(
                 track.title,
                 maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 track.artist,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: const TextStyle(color: Colors.white54),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               _PositionBar(services: services),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               _Controls(services: services),
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
+              _Actions(services: services, track: track),
+              const SizedBox(height: 12),
               _CacheRow(services: services, track: track),
             ],
           ),
@@ -102,8 +111,10 @@ class _PositionBar extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(_clock(position), style: Theme.of(context).textTheme.bodySmall),
-                      Text(_clock(duration), style: Theme.of(context).textTheme.bodySmall),
+                      Text(_clock(position),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(_clock(duration),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -126,6 +137,8 @@ class _Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+
     return StreamBuilder<PlaybackState>(
       stream: services.handler.playbackState.stream,
       builder: (context, snapshot) {
@@ -133,31 +146,48 @@ class _Controls extends StatelessWidget {
         final playing = state?.playing ?? false;
         final busy = state?.processingState == AudioProcessingState.loading ||
             state?.processingState == AudioProcessingState.buffering;
+        final shuffle = state?.shuffleMode == AudioServiceShuffleMode.all;
+        final repeat = state?.repeatMode ?? AudioServiceRepeatMode.none;
 
         return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             IconButton(
-              iconSize: 36,
+              tooltip: 'Shuffle',
+              icon: Icon(Icons.shuffle, color: shuffle ? accent : Colors.white54),
+              onPressed: services.handler.toggleShuffle,
+            ),
+            IconButton(
+              iconSize: 34,
               icon: const Icon(Icons.skip_previous),
               onPressed: services.handler.skipToPrevious,
             ),
-            const SizedBox(width: 16),
             FilledButton(
               style: FilledButton.styleFrom(
                 shape: const CircleBorder(),
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.all(16),
               ),
               onPressed: busy
                   ? null
                   : () => playing ? services.handler.pause() : services.handler.play(),
-              child: Icon(playing ? Icons.pause : Icons.play_arrow, size: 32),
+              child: Icon(playing ? Icons.pause : Icons.play_arrow, size: 30),
             ),
-            const SizedBox(width: 16),
             IconButton(
-              iconSize: 36,
+              iconSize: 34,
               icon: const Icon(Icons.skip_next),
               onPressed: services.handler.skipToNext,
+            ),
+            IconButton(
+              tooltip: repeat == AudioServiceRepeatMode.one
+                  ? 'Repeat one'
+                  : repeat == AudioServiceRepeatMode.all
+                      ? 'Repeat all'
+                      : 'Repeat off',
+              icon: Icon(
+                repeat == AudioServiceRepeatMode.one ? Icons.repeat_one : Icons.repeat,
+                color: repeat == AudioServiceRepeatMode.none ? Colors.white54 : accent,
+              ),
+              onPressed: services.handler.cycleRepeat,
             ),
           ],
         );
@@ -166,8 +196,63 @@ class _Controls extends StatelessWidget {
   }
 }
 
-/// Shows the listening stats the auto-cache decision is based on, and lets you
-/// override the decision in either direction.
+class _Actions extends StatelessWidget {
+  const _Actions({required this.services, required this.track});
+
+  final AppServices services;
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        TextButton.icon(
+          onPressed: () => showAddToPlaylist(context, services, track),
+          icon: const Icon(Icons.playlist_add, size: 18),
+          label: const Text('Playlist'),
+        ),
+        ValueListenableBuilder<Set<String>>(
+          valueListenable: services.cache.downloading,
+          builder: (context, downloading, _) {
+            final busy = downloading.contains(track.id);
+            if (busy) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+            return track.isCached
+                ? TextButton.icon(
+                    onPressed: () => services.cache.remove(track),
+                    icon: const Icon(Icons.offline_pin, size: 18, color: Colors.greenAccent),
+                    label: const Text('Saved'),
+                  )
+                : TextButton.icon(
+                    onPressed: () => services.cache
+                        .download(track, origin: 'manual', force: true)
+                        .catchError((Object e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('$e')));
+                      }
+                      return null;
+                    }),
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: const Text('Download'),
+                  );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Explains the auto-cache decision in plain words, and lets you override it.
 class _CacheRow extends StatelessWidget {
   const _CacheRow({required this.services, required this.track});
 
@@ -176,71 +261,33 @@ class _CacheRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final messenger = ScaffoldMessenger.of(context);
     final needs = services.settings.autoCacheThreshold;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(track.isCached ? Icons.offline_pin : Icons.cloud_outlined,
-                  color: track.isCached ? Colors.greenAccent : null),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  track.isCached
-                      ? (track.cacheOrigin == 'auto'
-                          ? 'Saved automatically after $needs plays'
-                          : 'Saved on this device')
-                      : 'Played ${track.playCount}× · saved after $needs plays',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              if (track.isCached)
-                TextButton(
-                  onPressed: () async {
-                    await services.cache.remove(track);
-                    messenger.showSnackBar(
-                        const SnackBar(content: Text('Removed from this device')));
-                  },
-                  child: const Text('Remove'),
-                )
-              else
-                TextButton(
-                  onPressed: () async {
-                    try {
-                      await services.cache.download(track, origin: 'manual', force: true);
-                      messenger.showSnackBar(const SnackBar(content: Text('Saved for offline')));
-                    } catch (error) {
-                      messenger.showSnackBar(SnackBar(content: Text('Failed: $error')));
-                    }
-                  },
-                  child: const Text('Save now'),
-                ),
-            ],
-          ),
-          if (!track.isCached && track.skipCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.fast_forward, size: 16),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Skipped early ${track.skipCount}× — skips cancel out plays',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
+          Icon(track.isCached ? Icons.offline_pin : Icons.cloud_outlined,
+              size: 18, color: track.isCached ? Colors.greenAccent : Colors.white38),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              track.isCached
+                  ? (track.cacheOrigin == 'auto'
+                      ? 'Saved automatically'
+                      : 'Saved on this device')
+                  : 'Played ${track.playCount}× · auto-saves after $needs plays '
+                      'or one full listen',
+              style: const TextStyle(fontSize: 11, color: Colors.white54),
             ),
+          ),
+          if (track.skipCount > 0)
+            Text('${track.skipCount} early skips',
+                style: const TextStyle(fontSize: 11, color: Colors.white38)),
         ],
       ),
     );

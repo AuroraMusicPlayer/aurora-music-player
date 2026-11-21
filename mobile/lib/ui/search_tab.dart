@@ -154,17 +154,24 @@ class _SearchTabState extends State<SearchTab> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: _results.length,
-      itemBuilder: (context, index) {
-        final track = _results[index];
-        return _ResultTile(
-          track: track,
-          cached: _cachedIds.contains(track.id),
-          onTap: () => widget.services.handler
-              .playTracks(_results, startIndex: index),
-          onLongPress: () => _download(track),
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: widget.services.cache.downloading,
+      builder: (context, downloading, _) {
+        return ListView.builder(
+          padding: const EdgeInsets.only(bottom: 24),
+          itemCount: _results.length,
+          itemBuilder: (context, index) {
+            final track = _results[index];
+            return _ResultTile(
+              track: track,
+              cached: _cachedIds.contains(track.id),
+              downloading: downloading.contains(track.id),
+              onTap: () => widget.services.handler
+                  .playTracks(_results, startIndex: index),
+              onLongPress: () => _download(track),
+              onDownload: () => _download(track),
+            );
+          },
         );
       },
     );
@@ -175,14 +182,18 @@ class _ResultTile extends StatelessWidget {
   const _ResultTile({
     required this.track,
     required this.cached,
+    required this.downloading,
     required this.onTap,
     required this.onLongPress,
+    required this.onDownload,
   });
 
   final Track track;
   final bool cached;
+  final bool downloading;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -217,14 +228,27 @@ class _ResultTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (cached)
-            const Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: Icon(Icons.offline_pin_outlined,
-                  size: 16, color: Colors.greenAccent),
-            ),
           if (clock.isNotEmpty)
-            Text(clock, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(clock,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            ),
+          if (downloading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (cached)
+            const Icon(Icons.offline_pin_outlined,
+                size: 18, color: Colors.greenAccent)
+          else
+            IconButton(
+              tooltip: 'Download',
+              icon: const Icon(Icons.download_outlined, size: 20),
+              onPressed: onDownload,
+            ),
         ],
       ),
     );

@@ -120,3 +120,30 @@ class Track {
         lastPlayed: lastPlayed ?? this.lastPlayed,
       );
 }
+
+
+/// A user playlist. Tracks live in `playlist_tracks`, ordered by position.
+class Playlist {
+  const Playlist({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    this.trackCount = 0,
+    this.thumbnail,
+  });
+
+  final int id;
+  final String name;
+  final DateTime createdAt;
+  final int trackCount;
+  final String? thumbnail;
+
+  factory Playlist.fromRow(Map<String, Object?> row) => Playlist(
+        id: (row['id'] as num).toInt(),
+        name: row['name'] as String,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+            ((row['created_at'] as num?) ?? 0).toInt()),
+        trackCount: (row['track_count'] as num?)?.toInt() ?? 0,
+        thumbnail: row['thumbnail'] as String?,
+      );
+}
