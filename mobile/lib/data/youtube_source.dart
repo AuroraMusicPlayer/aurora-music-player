@@ -17,14 +17,36 @@ class ResolvedStream {
   bool get isStale => DateTime.now().difference(resolvedAt) > const Duration(hours: 5);
 }
 
+class _CachedSearch {
+  const _CachedSearch(this.at, this.tracks);
+
+  final DateTime at;
+  final List<Track> tracks;
+}
+
 /// YouTube access entirely on the device — no server involved.
 ///
-/// Search and manifest resolution use `youtube_explode_dart`. The bytes are
-/// fetched by [DeviceCache] with a plain HTTP client rather than the library's
-/// downloader, which stalls on googlevideo's redirect chain.
+/// Google rate-limits undisguised traffic: hammering it produces
+/// `GOOGLE_ABUSE_EXCEPTION` redirect loops instead of results. This class is
+/// therefore deliberately conservative:
+///
+///  * every request goes through a minimum gap ([_minGap]),
+///  * identical searches are cached for [searchTtl],
+///  * an abuse response puts the whole source into a cool-down instead of
+///    retrying in a loop, and surfaces a readable message to the UI.
 class YouTubeSource {
+  YouTubeSource({this.minGap = const Duration(milliseconds: 900)});
+
+  final Duration minGap;
+  static const searchTtl = Duration(minutes: 20);
+  static const abuseCooldown = Duration(minutes: 4);
+
   final YoutubeExplode _yt = YoutubeExplode();
   final Map<String, ResolvedStream> _urls = {};
+  final Map<String, _CachedSearch> _searches = {};
+
+  DateTime _lastRequest = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _cooldownUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Things that never belong in a music library.
   static final _noise = RegExp(
@@ -36,56 +58,81 @@ class YouTubeSource {
     caseSensitive: false,
   );
 
-  Future<List<Track>> search(String query, {int limit = 25}) async {
-    final results = await _yt.search
-        .search(query)
-        .timeout(const Duration(seconds: 30));
+  bool get isCoolingDown => DateTime.now().isBefore(_cooldownUntil);
 
-    final seen = <String>{};
-    final tracks = <Track>[];
-    for (final video in results) {
-      final track = _toTrack(video);
-      final key = '${track.title.toLowerCase()}|${track.artist.toLowerCase()}';
-      if (!seen.add(key)) continue;
-      tracks.add(track);
-      if (tracks.length >= limit) break;
+  Duration get cooldownRemaining =>
+      isCoolingDown ? _cooldownUntil.difference(DateTime.now()) : Duration.zero;
+
+  Future<List<Track>> search(String query, {int limit = 25, bool refresh = false}) async {
+    final key = '${query.trim().toLowerCase()}|$limit';
+    final cached = _searches[key];
+    if (!refresh &&
+        cached != null &&
+        DateTime.now().difference(cached.at) < searchTtl) {
+      return cached.tracks;
     }
-    return tracks;
+
+    await _beforeRequest();
+
+    try {
+      final results = await _yt.search
+          .search(query)
+          .timeout(const Duration(seconds: 15));
+
+      final seen = <String>{};
+      final tracks = <Track>[];
+      for (final video in results) {
+        final track = _toTrack(video);
+        final dedupeKey = '${track.title.toLowerCase()}|${track.artist.toLowerCase()}';
+        if (!seen.add(dedupeKey)) continue;
+        tracks.add(track);
+        if (tracks.length >= limit) break;
+      }
+
+      _searches[key] = _CachedSearch(DateTime.now(), tracks);
+      return tracks;
+    } catch (error) {
+      throw _translate(error);
+    }
   }
 
   /// Resolve (and memoise) a playable URL for a video id.
   ///
-  /// Only the **progressive (muxed) stream** is used. Audio-only streams are
-  /// DASH fragments (`ftypdash`) which AVFoundation refuses to play over HTTP
-  /// and which YouTube answers with 403 for client-side requests. The muxed
-  /// stream is a plain `ftypmp42` MP4 that both AVPlayer and ExoPlayer handle,
-  /// at the cost of carrying a 360p video track alongside the audio.
+  /// Only the progressive (muxed) stream is used. Audio-only streams are DASH
+  /// fragments (`ftypdash`) that AVFoundation refuses to play over HTTP and
+  /// that YouTube answers with 403. The muxed stream is a plain `ftypmp42` MP4
+  /// both AVPlayer and ExoPlayer handle, at the cost of a 360p video track.
   Future<ResolvedStream> stream(String videoId) async {
     final cached = _urls[videoId];
     if (cached != null && !cached.isStale) return cached;
 
-    final manifest = await _yt.videos.streamsClient
-        .getManifest(videoId)
-        .timeout(const Duration(seconds: 30));
+    await _beforeRequest();
 
-    // Smallest progressive stream first: same container, less video to fetch.
-    final progressive = manifest.muxed.toList()
-      ..sort((a, b) => a.size.totalBytes.compareTo(b.size.totalBytes));
+    try {
+      final manifest = await _yt.videos.streamsClient
+          .getManifest(videoId)
+          .timeout(const Duration(seconds: 20));
 
-    if (progressive.isEmpty) {
-      throw const YouTubeSourceException(
-        'No progressive stream for that video — try another upload',
+      final progressive = manifest.muxed.toList()
+        ..sort((a, b) => a.size.totalBytes.compareTo(b.size.totalBytes));
+
+      if (progressive.isEmpty) {
+        throw const YouTubeSourceException(
+          'No progressive stream for that video — try another upload',
+        );
+      }
+
+      final stream = progressive.first;
+      final resolved = ResolvedStream(
+        url: stream.url.toString(),
+        bytes: stream.size.totalBytes,
+        resolvedAt: DateTime.now(),
       );
+      _urls[videoId] = resolved;
+      return resolved;
+    } catch (error) {
+      throw _translate(error);
     }
-
-    final stream = progressive.first;
-    final resolved = ResolvedStream(
-      url: stream.url.toString(),
-      bytes: stream.size.totalBytes,
-      resolvedAt: DateTime.now(),
-    );
-    _urls[videoId] = resolved;
-    return resolved;
   }
 
   /// Called when a URL stops working mid-session (they expire after ~6h).
@@ -102,8 +149,47 @@ class YouTubeSource {
     return null;
   }
 
+  /* ------------------------------ internals ----------------------------- */
+
+  Future<void> _beforeRequest() async {
+    if (isCoolingDown) {
+      final minutes = (cooldownRemaining.inSeconds / 60).ceil();
+      throw YouTubeSourceException(
+        'YouTube is rate-limiting this device. Try again in about '
+        '$minutes minute${minutes == 1 ? '' : 's'}.',
+      );
+    }
+
+    final since = DateTime.now().difference(_lastRequest);
+    if (since < minGap) {
+      await Future<void>.delayed(minGap - since);
+    }
+    _lastRequest = DateTime.now();
+  }
+
+  /// Turns YouTube's opaque abuse redirects into something a person can act on,
+  /// and stops the app from making it worse.
+  Exception _translate(Object error) {
+    final text = error.toString();
+    final abused = text.contains('GOOGLE_ABUSE_EXCEPTION') ||
+        text.contains('Redirect limit exceeded') ||
+        text.contains('403');
+
+    if (abused) {
+      _cooldownUntil = DateTime.now().add(abuseCooldown);
+      return YouTubeSourceException(
+        'YouTube temporarily blocked this device. Wait a few minutes, then '
+        'try again. Playing music that is already saved for offline still works.',
+      );
+    }
+    if (error is YouTubeSourceException) return error;
+    return YouTubeSourceException('YouTube request failed: $text');
+  }
+
   Track _toTrack(Video video) {
-    final artist = video.author.replaceAll(RegExp(r'\s*-\s*Topic$', caseSensitive: false), '').trim();
+    final artist = video.author
+        .replaceAll(RegExp(r'\s*-\s*Topic$', caseSensitive: false), '')
+        .trim();
     return Track(
       id: video.id.value,
       title: _cleanTitle(video.title, artist),

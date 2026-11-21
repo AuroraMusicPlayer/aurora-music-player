@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -22,7 +20,12 @@ class _HomeTabState extends State<HomeTab> {
   HomeFeed? _feed;
   bool _loading = false;
   String? _error;
-  Timer? _refreshDebounce;
+  DateTime? _loadedAt;
+
+  /// Rebuilding the feed costs YouTube searches, and Google blocks devices
+  /// that ask too often. Recompute at most this often; pull-to-refresh always
+  /// works for a manual update.
+  static const _feedTtl = Duration(minutes: 45);
 
   @override
   void initState() {
@@ -33,17 +36,15 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   void dispose() {
-    _refreshDebounce?.cancel();
     widget.services.events.revision.removeListener(_onLibraryChanged);
     super.dispose();
   }
 
-  /// Play counts change constantly while listening; rebuilding the feed means
-  /// re-running searches, so coalesce updates instead of hitting YouTube on
-  /// every position tick.
   void _onLibraryChanged() {
-    _refreshDebounce?.cancel();
-    _refreshDebounce = Timer(const Duration(seconds: 20), _load);
+    final loadedAt = _loadedAt;
+    if (loadedAt == null || DateTime.now().difference(loadedAt) > _feedTtl) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -59,6 +60,7 @@ class _HomeTabState extends State<HomeTab> {
       setState(() {
         _feed = result;
         _error = null;
+        _loadedAt = DateTime.now();
       });
     } catch (error) {
       if (!mounted) return;

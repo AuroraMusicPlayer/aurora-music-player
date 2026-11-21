@@ -59,7 +59,7 @@ class Recommendations {
     final recent = await library.recent(limit: 20);
     final played = await library.mostPlayed(limit: 20);
     final offline = await library.cached();
-    final topArtists = await library.topArtists(limit: 3, minPlays: 2);
+    final topArtists = await library.topArtists(limit: 2, minPlays: 2);
 
     final shelves = <HomeShelf>[];
 
