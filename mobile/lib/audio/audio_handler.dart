@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -48,6 +49,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       );
 
   final AudioPlayer _player = AudioPlayer();
+  AudioSession? _session;
 
   final ValueNotifier<String?> error = ValueNotifier<String?>(null);
   final ValueNotifier<Track?> activeTrack = ValueNotifier<Track?>(null);
@@ -63,8 +65,21 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   /* ------------------------------- queue -------------------------------- */
 
+  /// iOS only promotes an app to "Now Playing" (Control Center, Dynamic Island,
+  /// lock screen) once it holds an active playback audio session.
+  Future<void> _ensureSession() async {
+    try {
+      final session = _session ??= await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      await session.setActive(true);
+    } catch (error) {
+      if (kDebugMode) debugPrint('audio session setup failed: $error');
+    }
+  }
+
   Future<void> playTracks(List<Track> tracks, {int startIndex = 0}) async {
     if (tracks.isEmpty) return;
+    await _ensureSession();
     final start = startIndex.clamp(0, tracks.length - 1);
     final generation = ++_generation;
 
