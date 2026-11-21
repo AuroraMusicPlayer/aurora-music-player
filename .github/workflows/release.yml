@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+      android:
+        description: 'Build the Android APK'
+        type: boolean
+        default: true
+      ios:
+        description: 'Build the unsigned iOS IPA'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.50.1'
+
+jobs:
+  android:
+    if: github.event_name == 'push' || inputs.android
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Tests
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Rename artifact
+        run: |
+          mkdir -p dist-out
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             dist-out/aurora-music-${TAG}-arm64.apk
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Aurora Music ${{ inputs.tag || github.ref_name }}
+          body: |
+            Aurora Music — personal build.
+
+            **Android** (`*.apk`): enable "install unknown apps" and open the file.
+            **iOS** (`*-unsigned.ipa`): unsigned by definition — re-sign with
+            AltStore, SideStore or Sideloadly using your own Apple ID.
+
+            Everything runs on the device: no server, no account.
+          files: mobile/dist-out/*.apk
+          fail_on_unmatched_files: true
+
+  ios:
+    if: github.event_name == 'push' || inputs.ios
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Build (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -qry "$GITHUB_WORKSPACE/mobile/dist-out/aurora-music-${TAG}-unsigned.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/mobile/dist-out/"
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Aurora Music ${{ inputs.tag || github.ref_name }}
+          body: |
+            Aurora Music — personal build.
+
+            **Android** (`*.apk`): enable "install unknown apps" and open the file.
+            **iOS** (`*-unsigned.ipa`): unsigned by definition — re-sign with
+            AltStore, SideStore or Sideloadly using your own Apple ID.
+
+            Everything runs on the device: no server, no account.
+          files: mobile/dist-out/*.ipa
+          fail_on_unmatched_files: true
