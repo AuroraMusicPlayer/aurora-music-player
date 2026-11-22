@@ -8,6 +8,7 @@ import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
 import 'data/artwork_cache.dart';
 import 'data/google_account.dart';
+import 'data/youtube_api.dart';
 import 'data/library.dart';
 import 'data/playback_memory.dart';
 import 'data/youtube_source.dart';
@@ -18,7 +19,8 @@ Future<void> main() async {
 
   final settings = await Settings.load();
   final library = await Library.open();
-  final source = YouTubeSource();
+  final metadata = YouTubeApi();
+  final source = YouTubeSource(metadata: metadata);
   final events = AppEvents();
   final memory = await PlaybackMemory.load();
   final artwork = ArtworkCache();
@@ -55,6 +57,7 @@ Future<void> main() async {
         memory: memory,
         artwork: artwork,
         google: google,
+        metadata: metadata,
       ),
     ),
   );
@@ -72,6 +75,7 @@ Future<void> main() async {
       memory: memory,
       artwork: artwork,
       google: google,
+      metadata: metadata,
     ),
   );
 }

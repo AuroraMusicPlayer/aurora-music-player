@@ -94,6 +94,7 @@ class Track {
       };
 
   Track copyWith({
+    int? duration,
     String? audioPath,
     int? bytes,
     DateTime? cachedAt,
@@ -108,7 +109,7 @@ class Track {
         title: title,
         artist: artist,
         album: album,
-        duration: duration,
+        duration: duration ?? this.duration,
         thumbnail: thumbnail,
         audioPath: audioPath ?? this.audioPath,
         bytes: bytes ?? this.bytes,

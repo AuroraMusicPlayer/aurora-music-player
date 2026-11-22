@@ -7,6 +7,7 @@ import 'data/artwork_cache.dart';
 import 'data/google_account.dart';
 import 'data/library.dart';
 import 'data/playback_memory.dart';
+import 'data/youtube_api.dart';
 import 'data/youtube_source.dart';
 import 'settings.dart';
 import 'ui/home_screen.dart';
@@ -23,6 +24,7 @@ class AppServices {
     required this.memory,
     required this.artwork,
     required this.google,
+    required this.metadata,
   });
 
   final Settings settings;
@@ -34,6 +36,7 @@ class AppServices {
   final PlaybackMemory memory;
   final ArtworkCache artwork;
   final GoogleAccount google;
+  final YouTubeApi metadata;
 }
 
 class AuroraApp extends StatelessWidget {

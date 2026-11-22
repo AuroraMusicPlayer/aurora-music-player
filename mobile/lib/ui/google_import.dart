@@ -89,23 +89,51 @@ Future<void> showGoogleImport(BuildContext context, AppServices services) async 
       );
     }
 
-    status.value = 'Saving ${all.length} songs to your library…';
-    for (final track in all) {
+    status.value = 'Filling in track lengths…';
+    final durations = await services.metadata
+        .durations(all.map((t) => t.id).toList())
+        .catchError((Object _) => <String, int>{});
+
+    List<Track> enrich(List<Track> tracks) => [
+          for (final track in tracks)
+            track.duration == null && durations.containsKey(track.id)
+                ? track.copyWith(duration: durations[track.id])
+                : track,
+        ];
+
+    final likedTracks = enrich(liked);
+    final importedPlaylists = [
+      for (final playlist in playlists)
+        LibraryPlaylist(
+          title: playlist.title,
+          thumbnail: playlist.thumbnail,
+          tracks: enrich(playlist.tracks),
+        ),
+    ];
+    final enriched = [
+      ...likedTracks,
+      for (final playlist in importedPlaylists) ...playlist.tracks,
+    ];
+
+    status.value = 'Saving ${enriched.length} songs to your library…';
+    for (final track in enriched) {
       await services.library.remember(track);
     }
 
-    if (liked.isNotEmpty) {
-      await services.library.createPlaylistWithTracks('Liked from YouTube', liked);
+    if (likedTracks.isNotEmpty) {
+      await services.library
+          .createPlaylistWithTracks('Liked from YouTube', likedTracks);
     }
-    for (final playlist in playlists) {
-      await services.library.createPlaylistWithTracks(playlist.title, playlist.tracks);
+    for (final playlist in importedPlaylists) {
+      await services.library
+          .createPlaylistWithTracks(playlist.title, playlist.tracks);
     }
     services.events.bump();
 
     var saved = 0;
     if (saveOffline) {
       saved = await services.cache.downloadAll(
-        all,
+        enriched,
         onProgress: (done, total) =>
             status.value = 'Saving offline $done/$total',
       );

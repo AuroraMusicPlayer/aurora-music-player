@@ -1,6 +1,7 @@
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'models.dart';
+import 'youtube_api.dart';
 
 /// A playable audio URL plus what we know about it.
 class ResolvedStream {
@@ -35,9 +36,13 @@ class _CachedSearch {
 ///  * an abuse response puts the whole source into a cool-down instead of
 ///    retrying in a loop, and surfaces a readable message to the UI.
 class YouTubeSource {
-  YouTubeSource({this.minGap = const Duration(milliseconds: 900)});
+  YouTubeSource({
+    this.minGap = const Duration(milliseconds: 900),
+    YouTubeApi? metadata,
+  }) : _metadata = metadata;
 
   final Duration minGap;
+  final YouTubeApi? _metadata;
   static const searchTtl = Duration(minutes: 20);
   static const abuseCooldown = Duration(minutes: 4);
 
@@ -167,7 +172,7 @@ class YouTubeSource {
 
       return ImportedPlaylist(
         name: meta.title.trim().isEmpty ? 'Imported playlist' : meta.title.trim(),
-        tracks: tracks,
+        tracks: await _withDurations(tracks),
       );
     } catch (error) {
       throw _translate(error);
@@ -185,6 +190,26 @@ class YouTubeSource {
     if (list != null && list.isNotEmpty) return list;
     if (uri.pathSegments.contains('playlist')) return null;
     return null;
+  }
+
+  /// Fills in missing durations so the seek bar and the "half the track"
+  /// caching rule have something to work with.
+  Future<List<Track>> _withDurations(List<Track> tracks) async {
+    final api = _metadata;
+    if (api == null || !api.isConfigured) return tracks;
+
+    try {
+      final durations = await api.durations(tracks.map((t) => t.id).toList());
+      if (durations.isEmpty) return tracks;
+      return [
+        for (final track in tracks)
+          track.duration == null && durations.containsKey(track.id)
+              ? track.copyWith(duration: durations[track.id])
+              : track,
+      ];
+    } catch (_) {
+      return tracks; // durations are a nicety, never a blocker
+    }
   }
 
   /// Called when a URL stops working mid-session (they expire after ~6h).
