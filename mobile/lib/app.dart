@@ -13,6 +13,10 @@ import 'settings.dart';
 import 'ui/home_screen.dart';
 
 /// Everything long-lived, created once in `main()` and passed down.
+/// Build identity, injected at compile time so Settings can show exactly which
+/// build is installed.
+const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
+
 class AppServices {
   AppServices({
     required this.settings,

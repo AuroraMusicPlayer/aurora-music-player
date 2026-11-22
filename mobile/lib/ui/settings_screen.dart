@@ -41,15 +41,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final google = services.google;
 
     if (!google.isConfigured) {
-      return const [
+      return [
         ListTile(
-          leading: Icon(Icons.key_off_outlined),
-          title: Text('Not configured in this build'),
-          subtitle: Text(
-            'Rebuild with --dart-define=GOOGLE_CLIENT_ID=<your OAuth client id> '
-            'to enable importing your YouTube playlists and liked songs.',
-            style: TextStyle(fontSize: 12),
-          ),
+          leading: const Icon(Icons.key_off_outlined),
+          title: const Text('Not configured in this build'),
+          subtitle: Text(google.missingConfigHint,
+              style: const TextStyle(fontSize: 12)),
         ),
       ];
     }
@@ -209,6 +206,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const _SectionHeader('About'),
+              ListTile(
+                dense: true,
+                title: const Text('Version'),
+                trailing: Text(appVersion,
+                    style: const TextStyle(fontSize: 12, color: Colors.white38)),
+              ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
                 child: Text(

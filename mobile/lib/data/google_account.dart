@@ -68,6 +68,19 @@ class GoogleAccount {
           photoUrl: _account!.photoUrl,
         );
 
+  /// Explains what a given build is missing, so the app never just says
+  /// "not configured".
+  String get missingConfigHint {
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return 'This iOS build has no GOOGLE_CLIENT_ID compiled in. Rebuild with '
+          '--dart-define-from-file=google.json containing your iOS client id.';
+    }
+    return 'This Android build has no GOOGLE_ANDROID_CLIENT_ID or '
+        'GOOGLE_SERVER_CLIENT_ID compiled in. Rebuild with '
+        '--dart-define-from-file=google.json.';
+  }
+
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
     if (!isConfigured) {

@@ -25,8 +25,15 @@ esac
 PREFIX="${IOS_ID%.apps.googleusercontent.com}"
 REVERSED="com.googleusercontent.apps.$PREFIX"
 
+# Preserve keys that were not passed, so configuring iOS never drops Android.
+ANDROID_ID="${ANDROID_ID:-}"
+if [ -f google.json ] && [ -z "$ANDROID_ID" ]; then
+  ANDROID_ID=$(sed -n 's/.*"GOOGLE_ANDROID_CLIENT_ID": *"\([^"]*\)".*/\1/p' google.json)
+fi
+
 cat > google.json <<EOF
 {
+  "GOOGLE_ANDROID_CLIENT_ID": "$ANDROID_ID",
   "GOOGLE_CLIENT_ID": "$IOS_ID",
   "GOOGLE_SERVER_CLIENT_ID": "$WEB_ID",
   "YOUTUBE_API_KEY": "$API_KEY"
