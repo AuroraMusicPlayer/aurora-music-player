@@ -126,6 +126,17 @@ class _SearchTabState extends State<SearchTab> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.radio),
+              title: const Text('Start radio'),
+              subtitle: const Text('Endless mix from this artist',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await services.library.remember(track);
+                await services.handler.startRadio(track);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.playlist_play),
               title: const Text('Play next'),
               onTap: () async {

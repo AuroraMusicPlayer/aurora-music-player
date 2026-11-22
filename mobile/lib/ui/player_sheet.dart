@@ -282,6 +282,11 @@ class _Tools extends StatelessWidget {
           onTap: () => showLyricsSheet(context, services, track),
         ),
         _ToolButton(
+          icon: Icons.radio,
+          label: 'Radio',
+          onTap: () => services.handler.startRadio(track),
+        ),
+        _ToolButton(
           icon: Icons.queue_music,
           label: 'Queue',
           onTap: () => showQueueSheet(context, services),

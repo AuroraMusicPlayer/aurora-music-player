@@ -67,6 +67,17 @@ class Recommendations {
       shelves.add(HomeShelf(title: 'Heavy rotation', tracks: played));
     }
 
+    // A mix, not a list of history: alternate your most played with the ones
+    // you stopped playing, so it feels curated rather than chronological.
+    final mix = _buildMix(played, recent);
+    if (mix.length >= 4) {
+      shelves.add(HomeShelf(
+        title: 'Your mix',
+        subtitle: 'Your rotation, shuffled by how you listen',
+        tracks: mix,
+      ));
+    }
+
     // Local-only suggestion: no request, so it is safe to compute every load.
     final forgotten = await library.worthAnotherListen(limit: 12);
     if (forgotten.isNotEmpty) {
@@ -108,6 +119,19 @@ class Recommendations {
     }
 
     return HomeFeed(recent: recent, offline: offline, shelves: shelves);
+  }
+
+  /// Interleaves top plays with recently played, skipping duplicates.
+  List<Track> _buildMix(List<Track> played, List<Track> recent) {
+    final seen = <String>{};
+    final mix = <Track>[];
+    final longest = played.length > recent.length ? played.length : recent.length;
+
+    for (var i = 0; i < longest; i++) {
+      if (i < played.length && seen.add(played[i].id)) mix.add(played[i]);
+      if (i < recent.length && seen.add(recent[i].id)) mix.add(recent[i]);
+    }
+    return mix.take(20).toList(growable: false);
   }
 
   Future<List<Track>> _becauseYouPlayed(String artist, Set<String> known) async {

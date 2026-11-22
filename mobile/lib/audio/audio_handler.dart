@@ -264,6 +264,22 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     );
   }
 
+  /// Endless-ish radio seeded by a track: the seed first, then a search mix
+  /// built around its artist. Autoplay keeps it going afterwards.
+  Future<void> startRadio(Track seed, {int size = 15}) async {
+    final results = await source.search('${seed.artist} radio', limit: size);
+    final tracks = <Track>[
+      seed,
+      ...results.where((t) => t.id != seed.id),
+    ];
+    if (tracks.length == 1) {
+      // Nothing similar found; at least play the seed.
+      await playTracks([seed]);
+      return;
+    }
+    await playTracks(tracks);
+  }
+
   /// Insert directly after the current track.
   Future<void> playNext(Track track) async {
     if (_queue.isEmpty) {

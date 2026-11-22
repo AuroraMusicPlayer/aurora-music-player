@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../data/models.dart';
 import '../data/recommendations.dart';
+import 'charts_screen.dart';
+import 'search_results_screen.dart';
 import 'settings_screen.dart';
 import 'widgets.dart';
 
@@ -72,6 +74,18 @@ class _HomeTabState extends State<HomeTab> {
 
   void _play(List<Track> tracks, int index) {
     widget.services.handler.playTracks(tracks, startIndex: index);
+  }
+
+  void _openMood(String mood) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchResultsScreen(
+          services: widget.services,
+          title: mood,
+          query: '$mood music mix',
+        ),
+      ),
+    );
   }
 
   @override
@@ -159,14 +173,33 @@ class _HomeTabState extends State<HomeTab> {
         HomeShelf(title: 'Downloaded', subtitle: 'Plays without a connection', tracks: feed.offline),
     ];
 
-    return ListView.builder(
+    return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
-      itemCount: shelves.length,
-      itemBuilder: (context, index) => ShelfView(
-        shelf: shelves[index],
-        onPlay: _play,
-      ),
+      children: [
+        _MoodRow(onPick: _openMood),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Card(
+            elevation: 0,
+            color: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              leading: const Icon(Icons.trending_up),
+              title: const Text('Top charts'),
+              subtitle: const Text('Public charts, played from YouTube',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ChartsScreen(services: widget.services),
+                ),
+              ),
+            ),
+          ),
+        ),
+        for (final shelf in shelves) ShelfView(shelf: shelf, onPlay: _play),
+      ],
     );
   }
 }
@@ -191,6 +224,39 @@ class _ErrorView extends StatelessWidget {
           const SizedBox(height: 16),
           FilledButton.tonal(onPressed: onRetry, child: const Text('Retry')),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Situation shortcuts — the cheapest way to imitate "moods" without a
+/// recommendation backend: one search when you tap, nothing up front.
+class _MoodRow extends StatelessWidget {
+  const _MoodRow({required this.onPick});
+
+  final void Function(String mood) onPick;
+
+  static const _moods = ['Chill', 'Gym', 'Focus', 'Commute', 'Party', 'Sleep'];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        itemCount: _moods.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final mood = _moods[index];
+          return ActionChip(
+            label: Text(mood),
+            backgroundColor: const Color(0xFF1E1E1E),
+            side: BorderSide.none,
+            onPressed: () => onPick(mood),
+          );
+        },
       ),
     );
   }
