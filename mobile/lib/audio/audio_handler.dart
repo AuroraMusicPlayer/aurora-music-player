@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../app_events.dart';
+import '../data/artwork_cache.dart';
 import '../data/auto_cache_policy.dart';
 import '../data/device_cache.dart';
 import '../data/library.dart';
@@ -27,6 +28,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     required this.settings,
     required this.events,
     this.memory,
+    this.artwork,
   }) {
     _player.playbackEventStream.listen(
       _broadcastState,
@@ -48,6 +50,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   final Settings settings;
   final AppEvents events;
   final PlaybackMemory? memory;
+  final ArtworkCache? artwork;
 
   DateTime _lastSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -451,6 +454,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     _active = _queue[index];
     activeTrack.value = _active;
     mediaItem.add(_mediaItem(_active!));
+    unawaited(_localizeArtwork(_active!));
     _refreshActive();
   }
 
@@ -490,6 +494,17 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     events.bump();
     await _refreshActive();
     await _maybeAutoCache(track);
+  }
+
+  /// Re-publishes the media item with artwork cached on disk. The system asks
+  /// for artwork lazily; a local file answers instantly where a remote URL
+  /// often arrives too late.
+  Future<void> _localizeArtwork(Track track) async {
+    final cache = artwork;
+    if (cache == null || track.thumbnail == null) return;
+    final uri = await cache.forTrack(track.id, track.thumbnail);
+    if (uri == null || _active?.id != track.id) return;
+    mediaItem.add(_mediaItem(track, artUri: uri));
   }
 
   Future<void> _refreshActive() async {
@@ -626,13 +641,14 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   /* --------------------------- audio_service ---------------------------- */
 
-  MediaItem _mediaItem(Track track, {String? parent}) => MediaItem(
+  MediaItem _mediaItem(Track track, {String? parent, Uri? artUri}) => MediaItem(
         id: track.id,
         title: track.title,
         artist: track.artist,
         album: track.album,
         duration: track.length,
-        artUri: track.thumbnail == null ? null : Uri.tryParse(track.thumbnail!),
+        artUri: artUri ??
+            (track.thumbnail == null ? null : Uri.tryParse(track.thumbnail!)),
         extras: {
           'cached': track.isCached,
           if (parent != null) 'parent': parent,

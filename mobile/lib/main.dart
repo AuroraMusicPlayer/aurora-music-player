@@ -5,6 +5,7 @@ import 'app.dart';
 import 'app_events.dart';
 import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
+import 'data/artwork_cache.dart';
 import 'data/library.dart';
 import 'data/playback_memory.dart';
 import 'data/youtube_source.dart';
@@ -18,6 +19,7 @@ Future<void> main() async {
   final source = YouTubeSource();
   final events = AppEvents();
   final memory = await PlaybackMemory.load();
+  final artwork = ArtworkCache();
   final cache = DeviceCache(library: library, source: source, settings: settings);
 
   final handler = await AudioService.init(
@@ -28,6 +30,7 @@ Future<void> main() async {
       settings: settings,
       events: events,
       memory: memory,
+      artwork: artwork,
     ),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'dev.aurora.music',
@@ -47,6 +50,7 @@ Future<void> main() async {
         handler: handler,
         events: events,
         memory: memory,
+        artwork: artwork,
       ),
     ),
   );
