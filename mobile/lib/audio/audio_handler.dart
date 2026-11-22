@@ -33,7 +33,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     _player.playbackEventStream.listen(
       _broadcastState,
       onError: (Object error, StackTrace stack) {
-        this.error.value = '$error';
+        this.error.value = _translatePlaybackError(error);
         _attemptRecovery();
       },
     );
@@ -600,6 +600,26 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (position > const Duration(seconds: 2)) {
       await _player.seek(position);
     }
+  }
+
+  /// AVPlayer reports almost everything as -11800 "unknown error"; the useful
+  /// detail is nested inside. Turning that into a sentence is the difference
+  /// between "something broke" and knowing what to do.
+  static String _translatePlaybackError(Object error) {
+    final text = error.toString();
+
+    if (text.contains('403') || text.contains('-12660')) {
+      return 'YouTube refused this stream (403). That is usually rate limiting — '
+          'wait a few minutes, or play something already saved offline.';
+    }
+    if (text.contains('-11800')) {
+      return 'The system could not decode this track. If it was saved earlier, '
+          'tap Download again to refresh the file; otherwise try another song.';
+    }
+    if (text.contains('Source error') || text.contains('404')) {
+      return 'That stream is no longer available. Try playing it again.';
+    }
+    return 'Could not play that track: $text';
   }
 
   /* ---------------------- Android Auto / car browsing -------------------- */
