@@ -5,6 +5,7 @@ import 'home_tab.dart';
 import 'library_tab.dart';
 import 'mini_player.dart';
 import 'player_sheet.dart';
+import 'settings_screen.dart';
 import 'search_tab.dart';
 
 /// Shell: three tabs, a persistent mini player, and one place that surfaces
@@ -49,6 +50,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // how its layout is inspected in a simulator without tapping.
     if (_tab == 3) {
       return PlayerScreen(services: widget.services);
+    }
+    if (_tab == 4) {
+      return SettingsScreen(services: widget.services);
     }
 
     return Scaffold(

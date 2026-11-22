@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../data/google_account.dart';
 import '../data/models.dart';
+import 'google_import.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.services});
@@ -14,10 +16,13 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   int _usageBytes = 0;
+  GoogleUser? _googleUser;
+  bool _connecting = false;
 
   @override
   void initState() {
     super.initState();
+    _googleUser = widget.services.google.user;
     _loadUsage();
   }
 
@@ -29,6 +34,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadUsage() async {
     final bytes = await widget.services.cache.usageBytes();
     if (mounted) setState(() => _usageBytes = bytes);
+  }
+
+  List<Widget> _googleSection(AppServices services) {
+    final google = services.google;
+
+    if (!google.isConfigured) {
+      return const [
+        ListTile(
+          leading: Icon(Icons.key_off_outlined),
+          title: Text('Not configured in this build'),
+          subtitle: Text(
+            'Rebuild with --dart-define=GOOGLE_CLIENT_ID=<your OAuth client id> '
+            'to enable importing your YouTube playlists and liked songs.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+      ];
+    }
+
+    final user = _googleUser;
+    if (user == null) {
+      return [
+        ListTile(
+          leading: _connecting
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.login),
+          title: const Text('Connect Google account'),
+          subtitle: const Text(
+            'Read-only access to import your YouTube playlists and liked songs',
+            style: TextStyle(fontSize: 12),
+          ),
+          onTap: _connecting ? null : _connect,
+        ),
+      ];
+    }
+
+    return [
+      ListTile(
+        leading: const Icon(Icons.account_circle_outlined),
+        title: Text(user.email ?? 'Connected'),
+        subtitle: const Text('YouTube read-only access',
+            style: TextStyle(fontSize: 12)),
+        trailing: TextButton(
+          onPressed: _disconnect,
+          child: const Text('Sign out'),
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.cloud_download_outlined),
+        title: const Text('Import YouTube library'),
+        subtitle: const Text(
+          'Playlists and liked songs, with an option to save them offline',
+          style: TextStyle(fontSize: 12),
+        ),
+        onTap: () => showGoogleImport(context, services),
+      ),
+    ];
+  }
+
+  Future<void> _connect() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _connecting = true);
+    try {
+      final user = await widget.services.google.signIn();
+      if (!mounted) return;
+      setState(() => _googleUser = user);
+      if (user == null) {
+        messenger.showSnackBar(const SnackBar(content: Text('Sign-in cancelled')));
+      }
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+  }
+
+  Future<void> _disconnect() async {
+    await widget.services.google.signOut();
+    if (!mounted) return;
+    setState(() => _googleUser = null);
   }
 
   Future<void> _clearAutoCached() async {
@@ -59,6 +148,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           return ListView(
             padding: const EdgeInsets.only(bottom: 40),
             children: [
+              const _SectionHeader('Google account'),
+              ..._googleSection(services),
+
               const _SectionHeader('Automatic caching'),
               SwitchListTile(
                 title: const Text('Save tracks I replay'),

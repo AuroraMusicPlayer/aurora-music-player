@@ -4,6 +4,7 @@ import 'app_events.dart';
 import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
 import 'data/artwork_cache.dart';
+import 'data/google_account.dart';
 import 'data/library.dart';
 import 'data/playback_memory.dart';
 import 'data/youtube_source.dart';
@@ -21,6 +22,7 @@ class AppServices {
     required this.events,
     required this.memory,
     required this.artwork,
+    required this.google,
   });
 
   final Settings settings;
@@ -31,6 +33,7 @@ class AppServices {
   final AppEvents events;
   final PlaybackMemory memory;
   final ArtworkCache artwork;
+  final GoogleAccount google;
 }
 
 class AuroraApp extends StatelessWidget {

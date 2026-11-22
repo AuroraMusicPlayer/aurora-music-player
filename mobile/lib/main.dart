@@ -7,6 +7,7 @@ import 'debug_harness.dart';
 import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
 import 'data/artwork_cache.dart';
+import 'data/google_account.dart';
 import 'data/library.dart';
 import 'data/playback_memory.dart';
 import 'data/youtube_source.dart';
@@ -21,6 +22,7 @@ Future<void> main() async {
   final events = AppEvents();
   final memory = await PlaybackMemory.load();
   final artwork = ArtworkCache();
+  final google = GoogleAccount();
   final cache = DeviceCache(library: library, source: source, settings: settings);
 
   final handler = await AudioService.init(
@@ -52,6 +54,7 @@ Future<void> main() async {
         events: events,
         memory: memory,
         artwork: artwork,
+        google: google,
       ),
     ),
   );
@@ -68,6 +71,7 @@ Future<void> main() async {
       events: events,
       memory: memory,
       artwork: artwork,
+      google: google,
     ),
   );
 }

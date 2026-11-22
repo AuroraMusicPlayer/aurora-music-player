@@ -244,14 +244,15 @@ class YouTubeSource {
         .trim();
     return Track(
       id: video.id.value,
-      title: _cleanTitle(video.title, artist),
+      title: cleanTrackTitle(video.title, artist),
       artist: artist.isEmpty ? 'Unknown artist' : artist,
       duration: video.duration?.inSeconds,
       thumbnail: video.thumbnails.highResUrl,
     );
   }
 
-  String _cleanTitle(String raw, String artist) {
+  /// Shared with the Google import, which receives the same messy titles.
+  static String cleanTrackTitle(String raw, String artist) {
     var title = raw.replaceAll(_noise, ' ').replaceAll(_noiseTail, '');
     if (artist.isNotEmpty) {
       final prefix = RegExp('^\\s*${RegExp.escape(artist)}\\s*[-–—]\\s*', caseSensitive: false);
