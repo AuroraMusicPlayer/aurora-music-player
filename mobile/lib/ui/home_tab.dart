@@ -25,6 +25,7 @@ class _HomeTabState extends State<HomeTab> {
   DateTime? _loadedAt;
   Track? _continueTrack;
   Duration _continueAt = Duration.zero;
+  List<Track> _quickPicks = const [];
 
   /// Rebuilding the feed costs YouTube searches, and Google blocks devices
   /// that ask too often. Recompute at most this often; pull-to-refresh always
@@ -192,6 +193,13 @@ class _HomeTabState extends State<HomeTab> {
       );
     }
 
+    // The same tracks that head your shelves, in the compact two-column form
+    // YouTube Music uses for quick picks.
+    final source = feed.shelves.isNotEmpty
+        ? feed.shelves.first.tracks
+        : feed.recent;
+    _quickPicks = source.take(6).toList(growable: false);
+
     final shelves = <HomeShelf>[
       if (feed.recent.isNotEmpty)
         HomeShelf(title: 'Listen again', subtitle: 'Picked up where you left off', tracks: feed.recent),
@@ -209,6 +217,17 @@ class _HomeTabState extends State<HomeTab> {
           at: _continueAt,
           onTap: _resume,
         ),
+        if (_quickPicks.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 20, 16, 10),
+            child: Text('Quick picks',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          _QuickPicksGrid(
+            tracks: _quickPicks,
+            onPlay: (index) => _play(_quickPicks, index),
+          ),
+        ],
         _MoodRow(onPick: _openMood),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -391,6 +410,84 @@ class _ContinueCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// Two columns of compact rows, the way YouTube Music opens its home screen.
+class _QuickPicksGrid extends StatelessWidget {
+  const _QuickPicksGrid({required this.tracks, required this.onPlay});
+
+  final List<Track> tracks;
+  final void Function(int index) onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          childAspectRatio: 2.9,
+        ),
+        itemCount: tracks.length,
+        itemBuilder: (context, index) {
+          final track = tracks[index];
+          return InkWell(
+            onTap: () => onPlay(index),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF141414),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      width: 46,
+                      height: 46,
+                      child: track.thumbnail == null
+                          ? const ColoredBox(color: Color(0xFF222222))
+                          : Image.network(track.thumbnail!, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const ColoredBox(color: Color(0xFF222222))),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(track.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.white54)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
