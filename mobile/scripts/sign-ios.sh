@@ -55,4 +55,17 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" \
 
 echo
 ls -lh "$EXPORT_DIR"
-echo "Signed IPA ready. Install it with Xcode's Devices window, Apple Configurator, or AirDrop."
+
+# Optional wireless install onto the paired iPhone.
+if [ "${INSTALL:-0}" = "1" ]; then
+  DEVICE="${DEVICE:-00008150-001A18EE11D9401C}"
+  IPA=$(ls "$EXPORT_DIR"/*.ipa 2>/dev/null | head -1)
+  if [ -z "$IPA" ]; then
+    echo "No IPA to install" >&2
+    exit 1
+  fi
+  echo "Installing $IPA over the network to $DEVICE…"
+  xcrun devicectl device install app --device "$DEVICE" "$IPA"
+fi
+
+echo "Signed IPA ready. Re-run with INSTALL=1 to push it to the paired iPhone wirelessly."
