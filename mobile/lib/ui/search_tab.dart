@@ -126,6 +126,28 @@ class _SearchTabState extends State<SearchTab> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.playlist_play),
+              title: const Text('Play next'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await services.library.remember(track);
+                await services.handler.playNext(track);
+                messenger(context).showSnackBar(
+                    SnackBar(content: Text('Playing ${track.title} next')));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.queue),
+              title: const Text('Add to queue'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await services.library.remember(track);
+                await services.handler.addToQueue(track);
+                messenger(context).showSnackBar(
+                    SnackBar(content: Text('Added ${track.title} to queue')));
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.playlist_add),
               title: const Text('Add to playlist'),
               onTap: () async {
@@ -140,6 +162,9 @@ class _SearchTabState extends State<SearchTab> {
       ),
     );
   }
+
+  ScaffoldMessengerState messenger(BuildContext context) =>
+      ScaffoldMessenger.of(context);
 
   Future<void> _download(Track track) async {
     final messenger = ScaffoldMessenger.of(context);

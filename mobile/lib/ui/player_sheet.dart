@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'lyrics_sheet.dart';
 import 'playlist_dialogs.dart';
+import 'queue_sheet.dart';
 
 Future<void> showPlayerSheet(BuildContext context, AppServices services) {
   return showModalBottomSheet(
@@ -69,7 +71,9 @@ class PlayerSheet extends StatelessWidget {
               _Controls(services: services),
               const SizedBox(height: 8),
               _Actions(services: services, track: track),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
+              _Tools(services: services, track: track),
+              const SizedBox(height: 8),
               _CacheRow(services: services, track: track),
             ],
           ),
@@ -256,6 +260,122 @@ class _Actions extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+/// Lyrics, queue, speed and sleep timer.
+class _Tools extends StatelessWidget {
+  const _Tools({required this.services, required this.track});
+
+  final AppServices services;
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _ToolButton(
+          icon: Icons.lyrics_outlined,
+          label: 'Lyrics',
+          onTap: () => showLyricsSheet(context, services, track),
+        ),
+        _ToolButton(
+          icon: Icons.queue_music,
+          label: 'Queue',
+          onTap: () => showQueueSheet(context, services),
+        ),
+        ValueListenableBuilder<double>(
+          valueListenable: services.handler.speed,
+          builder: (context, speed, _) => _ToolButton(
+            icon: Icons.speed,
+            label: speed == 1 ? 'Speed' : '${speed}x',
+            onTap: services.handler.cycleSpeed,
+          ),
+        ),
+        ValueListenableBuilder<DateTime?>(
+          valueListenable: services.handler.sleepEndsAt,
+          builder: (context, endsAt, _) {
+            final label = endsAt == null
+                ? 'Sleep'
+                : '${endsAt.difference(DateTime.now()).inMinutes + 1}m';
+            return _ToolButton(
+              icon: endsAt == null ? Icons.bedtime_outlined : Icons.bedtime,
+              label: label,
+              onTap: () => _showSleepTimer(context, services),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  void _showSleepTimer(BuildContext context, AppServices services) {
+    final handler = services.handler;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF141414),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Sleep timer',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              ),
+            ),
+            for (final minutes in [15, 30, 45, 60])
+              ListTile(
+                title: Text('$minutes minutes'),
+                onTap: () {
+                  handler.setSleepTimer(Duration(minutes: minutes));
+                  Navigator.pop(sheetContext);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.timer_off_outlined),
+              title: const Text('Off'),
+              onTap: () {
+                handler.setSleepTimer(null);
+                Navigator.pop(sheetContext);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolButton extends StatelessWidget {
+  const _ToolButton({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: Colors.white70),
+            const SizedBox(height: 4),
+            Text(label,
+                style: const TextStyle(fontSize: 10, color: Colors.white54)),
+          ],
+        ),
+      ),
     );
   }
 }

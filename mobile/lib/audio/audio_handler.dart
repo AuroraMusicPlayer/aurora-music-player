@@ -35,6 +35,9 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     );
     _player.currentIndexStream.listen(_onIndexChanged);
     _player.positionStream.listen(_onPosition);
+    _player.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed) _onQueueFinished();
+    });
   }
 
   final YouTubeSource source;
@@ -53,6 +56,14 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   final ValueNotifier<String?> error = ValueNotifier<String?>(null);
   final ValueNotifier<Track?> activeTrack = ValueNotifier<Track?>(null);
+
+  /// When the sleep timer will pause playback, or null when it is off.
+  final ValueNotifier<DateTime?> sleepEndsAt = ValueNotifier<DateTime?>(null);
+  final ValueNotifier<double> speed = ValueNotifier<double>(1.0);
+  final ValueNotifier<bool> autoplayEnabled = ValueNotifier<bool>(true);
+
+  Timer? _sleepTimer;
+  Timer? _fadeTimer;
 
   /// Queue from the track the user started on, onwards.
   List<Track> _queue = [];
@@ -110,6 +121,35 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   /// Resolve and append the rest of the queue in the background, so playback
   /// starts immediately instead of waiting for 25 YouTube lookups.
+  /// When the queue runs out and autoplay is on, continue with a search seeded
+  /// by the last artist so music never stops unexpectedly.
+  Future<void> _onQueueFinished() async {
+    if (!autoplayEnabled.value) return;
+    final last = _active;
+    if (last == null) return;
+
+    try {
+      final more = await source.search('${last.artist} mix', limit: 10);
+      final fresh = more
+          .where((t) => !_queue.any((q) => q.id == t.id))
+          .take(5)
+          .toList(growable: false);
+      if (fresh.isEmpty) return;
+
+      for (final track in fresh) {
+        await library.remember(track);
+        _queue.add(track);
+        await _player.addAudioSource(await _audioSource(track));
+        _appended++;
+      }
+      queue.add([for (final t in _queue) _mediaItem(t)]);
+      await _player.seek(Duration.zero, index: _queue.length - fresh.length);
+      await _player.play();
+    } catch (_) {
+      // Autoplay is a nicety; never surface it as an error.
+    }
+  }
+
   Future<void> _appendRemaining(int generation) async {
     while (_appended < _queue.length) {
       if (generation != _generation) return;
@@ -153,6 +193,153 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
+
+  /* ---------------------------- queue editing --------------------------- */
+
+  /// Rebuilds the player playlist from [_queue], keeping the current track and
+  /// position. Used by reorder / remove / play-next, none of which just_audio
+  /// supports in place.
+  Future<void> _rebuild({required int index, Duration position = Duration.zero, bool resume = true}) async {
+    final sources = <AudioSource>[];
+    for (final track in _queue) {
+      sources.add(await _audioSource(track));
+    }
+    _appended = _queue.length;
+    queue.add([for (final track in _queue) _mediaItem(track)]);
+    await _player.setAudioSources(
+      sources,
+      initialIndex: index.clamp(0, sources.isEmpty ? 0 : sources.length - 1),
+      initialPosition: position,
+    );
+    if (resume && _player.playing) unawaited(_player.play());
+  }
+
+  Future<void> jumpTo(int index) async {
+    if (index < 0 || index >= _queue.length) return;
+    await _player.seek(Duration.zero, index: index);
+  }
+
+  Future<void> removeAt(int index) async {
+    if (index < 0 || index >= _queue.length) return;
+    final playingIndex = _player.currentIndex ?? 0;
+    final position = _player.position;
+    final wasPlaying = _player.playing;
+
+    _queue.removeAt(index);
+
+    if (_queue.isEmpty) {
+      await _player.stop();
+      mediaItem.add(null);
+      activeTrack.value = null;
+      return;
+    }
+
+    final nextIndex = index < playingIndex
+        ? playingIndex - 1
+        : (index == playingIndex ? playingIndex : playingIndex);
+    await _rebuild(
+      index: nextIndex.clamp(0, _queue.length - 1),
+      position: index == playingIndex ? Duration.zero : position,
+      resume: wasPlaying,
+    );
+  }
+
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    if (oldIndex < 0 || oldIndex >= _queue.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (newIndex == oldIndex) return;
+
+    final playing = _active;
+    final position = _player.position;
+    final wasPlaying = _player.playing;
+
+    final track = _queue.removeAt(oldIndex);
+    _queue.insert(newIndex.clamp(0, _queue.length), track);
+
+    final index = playing == null ? 0 : _queue.indexWhere((t) => t.id == playing.id);
+    await _rebuild(
+      index: index < 0 ? 0 : index,
+      position: position,
+      resume: wasPlaying,
+    );
+  }
+
+  /// Insert directly after the current track.
+  Future<void> playNext(Track track) async {
+    if (_queue.isEmpty) {
+      await playTracks([track]);
+      return;
+    }
+    await library.remember(track);
+    final current = _player.currentIndex ?? 0;
+    final position = _player.position;
+    final wasPlaying = _player.playing;
+
+    _queue.insert((current + 1).clamp(0, _queue.length), track);
+    await _rebuild(index: current, position: position, resume: wasPlaying);
+  }
+
+  Future<void> addToQueue(Track track) async {
+    if (_queue.isEmpty) {
+      await playTracks([track]);
+      return;
+    }
+    await library.remember(track);
+    _queue.add(track);
+    await _player.addAudioSource(await _audioSource(track));
+    _appended = _queue.length;
+    queue.add([for (final t in _queue) _mediaItem(t)]);
+  }
+
+  /* ------------------------- speed & sleep timer ------------------------ */
+
+  Future<void> cycleSpeed() async {
+    const speeds = [1.0, 1.25, 1.5, 2.0, 0.75, 0.5];
+    final current = speed.value;
+    final index = speeds.indexOf(current);
+    final next = speeds[(index + 1) % speeds.length];
+    await _player.setSpeed(next);
+    speed.value = next;
+  }
+
+  /// Pauses playback after [duration], fading the volume out over the last
+  /// ten seconds so it does not cut off abruptly. Null cancels.
+  void setSleepTimer(Duration? duration) {
+    _sleepTimer?.cancel();
+    _fadeTimer?.cancel();
+
+    if (duration == null) {
+      sleepEndsAt.value = null;
+      _player.setVolume(1);
+      return;
+    }
+
+    sleepEndsAt.value = DateTime.now().add(duration);
+    final fadeStart = duration - const Duration(seconds: 10);
+
+    if (fadeStart <= Duration.zero) {
+      _sleepTimer = Timer(duration, _finishSleep);
+      return;
+    }
+
+    _sleepTimer = Timer(fadeStart, () {
+      var step = 0;
+      _fadeTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+        step++;
+        _player.setVolume((1 - step / 20).clamp(0.0, 1.0));
+        if (step >= 20) {
+          timer.cancel();
+          _finishSleep();
+        }
+      });
+    });
+  }
+
+  Future<void> _finishSleep() async {
+    await _player.pause();
+    await _player.setVolume(1);
+    sleepEndsAt.value = null;
+  }
 
   /// Heart / un-heart the current track. Favourites are also cached, because
   /// liking something is the clearest possible signal that it should be
