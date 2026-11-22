@@ -337,6 +337,27 @@ class Library {
     });
   }
 
+  /// Moves one track inside a playlist and rewrites the positions.
+  Future<void> movePlaylistTrack(int playlistId, int oldIndex, int newIndex) async {
+    final tracks = await playlistTracks(playlistId);
+    if (oldIndex < 0 || oldIndex >= tracks.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+
+    final track = tracks.removeAt(oldIndex);
+    tracks.insert(newIndex.clamp(0, tracks.length), track);
+
+    final batch = _db.batch();
+    for (var i = 0; i < tracks.length; i++) {
+      batch.update(
+        'playlist_tracks',
+        {'position': i},
+        where: 'playlist_id = ? AND track_id = ?',
+        whereArgs: [playlistId, tracks[i].id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<void> removeFromPlaylist(int playlistId, String trackId) async {
     await _db.delete('playlist_tracks',
         where: 'playlist_id = ? AND track_id = ?',

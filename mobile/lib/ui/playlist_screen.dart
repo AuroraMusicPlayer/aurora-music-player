@@ -95,11 +95,18 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       ),
                     ),
                     Expanded(
-                      child: ListView.builder(
+                      child: ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
                         itemCount: _tracks.length,
+                        onReorder: (oldIndex, newIndex) async {
+                          await widget.services.library
+                              .movePlaylistTrack(widget.playlist.id, oldIndex, newIndex);
+                          await _load();
+                        },
                         itemBuilder: (context, index) {
                           final track = _tracks[index];
                           return ListTile(
+                            key: ValueKey('pl-${widget.playlist.id}-${track.id}'),
                             onTap: () => widget.services.handler
                                 .playTracks(_tracks, startIndex: index),
                             onLongPress: () async {
@@ -127,10 +134,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                     color: Colors.white54, fontSize: 12)),
-                            trailing: track.isCached
-                                ? const Icon(Icons.offline_pin_outlined,
-                                    size: 16, color: Colors.greenAccent)
-                                : null,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (track.isCached)
+                                  const Icon(Icons.offline_pin_outlined,
+                                      size: 16, color: Colors.greenAccent),
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(left: 8),
+                                    child: Icon(Icons.drag_handle,
+                                        size: 18, color: Colors.white38),
+                                  ),
+                                ),
+                              ],
+                            ),
                           );
                         },
                       ),
