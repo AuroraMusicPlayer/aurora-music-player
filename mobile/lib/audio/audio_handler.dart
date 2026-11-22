@@ -179,7 +179,19 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   Future<AudioSource> _audioSource(Track track) async {
     if (track.isCached && track.audioPath != null) {
-      return AudioSource.uri(Uri.file(track.audioPath!), tag: _mediaItem(track));
+      // A cache entry written by an older build may be a DASH fragment that the
+      // system decoder refuses. Drop it rather than fail playback.
+      if (await cache.isPlayableFile(track.audioPath!)) {
+        return AudioSource.uri(Uri.file(track.audioPath!), tag: _mediaItem(track));
+      }
+      await cache.remove(track);
+      final cleared = track.withoutCache();
+      final index = _queue.indexWhere((t) => t.id == track.id);
+      if (index != -1) _queue[index] = cleared;
+      if (_active?.id == track.id) {
+        _active = cleared;
+        activeTrack.value = cleared;
+      }
     }
     final resolved = await source.stream(track.id);
     return AudioSource.uri(Uri.parse(resolved.url), tag: _mediaItem(track));
@@ -202,6 +214,20 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   @override
   Future<void> stop() async {
     await _player.stop();
+    await super.stop();
+  }
+
+  /// Closes playback entirely, the way the X on the YouTube mini player does.
+  Future<void> dismiss() async {
+    _generation++;
+    await _player.stop();
+    await _player.setAudioSources([]);
+    _queue.clear();
+    _appended = 0;
+    _active = null;
+    activeTrack.value = null;
+    mediaItem.add(null);
+    queue.add([]);
     await super.stop();
   }
 
@@ -558,10 +584,17 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (index == null || index >= _queue.length) return;
 
     final track = _queue[index];
-    if (track.isCached) return; // a broken file is not a URL problem
-
     _recoveryAttempts++;
     final position = _player.position;
+
+    // A cached file that fails to decode is worse than no cache: remove it and
+    // come back from the network.
+    if (track.isCached && track.audioPath != null) {
+      if (!await cache.isPlayableFile(track.audioPath!)) {
+        await cache.remove(track);
+        _queue[index] = track.withoutCache();
+      }
+    }
     source.invalidate(track.id);
     await playTracks(_queue, startIndex: index);
     if (position > const Duration(seconds: 2)) {

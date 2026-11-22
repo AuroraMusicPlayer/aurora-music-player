@@ -93,6 +93,21 @@ class Track {
         'last_played': lastPlayed?.millisecondsSinceEpoch,
       };
 
+  /// Same track, no longer treated as cached. Used when the file on disk turned
+  /// out to be unplayable.
+  Track withoutCache() => Track(
+        id: id,
+        title: title,
+        artist: artist,
+        album: album,
+        duration: duration,
+        thumbnail: thumbnail,
+        playCount: playCount,
+        skipCount: skipCount,
+        favorite: favorite,
+        lastPlayed: lastPlayed,
+      );
+
   Track copyWith({
     int? duration,
     String? audioPath,

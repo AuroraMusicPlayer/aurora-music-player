@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
 import '../data/recommendations.dart';
+import '../data/youtube_library.dart';
 import 'charts_screen.dart';
 import 'search_results_screen.dart';
 import 'settings_screen.dart';
@@ -27,6 +30,7 @@ class _HomeTabState extends State<HomeTab> {
   Track? _continueTrack;
   Duration _continueAt = Duration.zero;
   List<Track> _quickPicks = const [];
+  DateTime? _channelsLoadedAt;
 
   /// Rebuilding the feed costs YouTube searches, and Google blocks devices
   /// that ask too often. Recompute at most this often; pull-to-refresh always
@@ -91,11 +95,54 @@ class _HomeTabState extends State<HomeTab> {
         _error = null;
         _loadedAt = DateTime.now();
       });
+      // Signed-in accounts also get their own channels; this costs a handful of
+      // quota units, so it is cached for an hour.
+      unawaited(_loadChannels(result));
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Recent uploads from the channels the signed-in account follows. This is
+  /// the closest thing to YouTube Music's own suggestions that its API allows.
+  Future<void> _loadChannels(HomeFeed feed) async {
+    final services = widget.services;
+    if (!services.google.isConfigured || services.google.user == null) return;
+
+    final loadedAt = _channelsLoadedAt;
+    if (loadedAt != null &&
+        DateTime.now().difference(loadedAt) < const Duration(minutes: 60)) {
+      return;
+    }
+
+    YouTubeLibrary? reader;
+    try {
+      reader = YouTubeLibrary(services.google);
+      final tracks = await reader.recentFromSubscriptions();
+      if (!mounted || tracks.isEmpty) return;
+
+      for (final track in tracks) {
+        await services.library.remember(track);
+      }
+      _channelsLoadedAt = DateTime.now();
+      if (!mounted) return;
+      setState(() {
+        feed.shelves.insert(
+          0,
+          HomeShelf(
+            title: 'From your channels',
+            subtitle: 'Recent uploads from who you follow on YouTube',
+            tracks: tracks,
+          ),
+        );
+      });
+    } catch (_) {
+      // Suggestions are a bonus; never surface an error for them.
+    } finally {
+      reader?.dispose();
     }
   }
 

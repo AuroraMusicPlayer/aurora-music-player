@@ -131,6 +131,101 @@ class YouTubeLibrary {
     return result;
   }
 
+  /// Channels the account subscribes to.
+  Future<List<({String id, String title})>> subscriptions({int limit = 50}) async {
+    final channels = <({String id, String title})>[];
+    String? pageToken;
+
+    for (var page = 0; page < 2; page++) {
+      final body = await _get('/youtube/v3/subscriptions', {
+        'part': 'snippet',
+        'mine': 'true',
+        'maxResults': '50',
+        if (pageToken != null) 'pageToken': pageToken,
+      });
+      for (final item in (body['items'] as List? ?? const [])) {
+        if (item is! Map) continue;
+        final snippet = item['snippet'];
+        if (snippet is! Map) continue;
+        final id = (snippet['resourceId'] is Map
+                ? snippet['resourceId']['channelId']
+                : null)
+            ?.toString();
+        if (id == null || id.isEmpty) continue;
+        channels.add((id: id, title: (snippet['title'] ?? '').toString()));
+        if (channels.length >= limit) return channels;
+      }
+      pageToken = body['nextPageToken']?.toString();
+      if (pageToken == null) break;
+    }
+    return channels;
+  }
+
+  /// Recent uploads from the channels the account follows.
+  ///
+  /// YouTube Music's own recommender is not exposed to third parties, so this
+  /// uses the closest permitted signal: who you subscribe to. Cost is one quota
+  /// unit for the channel lookup plus one per channel, which is why it is
+  /// capped at [maxChannels].
+  Future<List<Track>> recentFromSubscriptions({
+    int maxChannels = 6,
+    int perChannel = 3,
+  }) async {
+    final channels = await subscriptions(limit: maxChannels);
+    if (channels.isEmpty) return const [];
+
+    // Uploads playlists are not in the subscriptions payload; fetch them in one
+    // call (up to 50 ids per request).
+    final body = await _get('/youtube/v3/channels', {
+      'part': 'contentDetails',
+      'id': channels.map((c) => c.id).join(','),
+      'maxResults': '50',
+    });
+
+    final uploads = <String, String>{};
+    for (final item in (body['items'] as List? ?? const [])) {
+      if (item is! Map) continue;
+      final id = item['id']?.toString();
+      final details = item['contentDetails'];
+      final playlist = details is Map && details['relatedPlaylists'] is Map
+          ? details['relatedPlaylists']['uploads']?.toString()
+          : null;
+      if (id != null && playlist != null) uploads[id] = playlist;
+    }
+
+    final tracks = <Track>[];
+    final seen = <String>{};
+    for (final channel in channels) {
+      final playlistId = uploads[channel.id];
+      if (playlistId == null) continue;
+
+      try {
+        final items = await _get('/youtube/v3/playlistItems', {
+          'part': 'snippet',
+          'playlistId': playlistId,
+          'maxResults': '$perChannel',
+        });
+        for (final item in (items['items'] as List? ?? const [])) {
+          if (item is! Map) continue;
+          final snippet = item['snippet'];
+          if (snippet is! Map) continue;
+          final videoId = (snippet['resourceId'] is Map
+                  ? snippet['resourceId']['videoId']
+                  : null)
+              ?.toString();
+          if (videoId == null || !seen.add(videoId)) continue;
+          final track = _trackFrom(videoId, snippet);
+          if (YouTubeSource.isCompilation(track)) continue;
+          tracks.add(track);
+        }
+      } catch (_) {
+        // One unreachable channel must not empty the shelf.
+        continue;
+      }
+    }
+    return tracks;
+  }
+
   Future<List<Track>> _playlistTracks(String playlistId) async {
     final tracks = <Track>[];
     String? pageToken;

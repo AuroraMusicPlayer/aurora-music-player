@@ -276,6 +276,15 @@ class YouTubeSource {
     );
   }
 
+  /// Titles that are clearly playlists or marathons rather than songs.
+  static final _compilation = RegExp(
+    r'\b(top\s*\d+|top\s+(songs|hits|music)|hits?|billboard|chart|playlist|compilation|greatest|best\s+of|nonstop|full\s+album|megamix)\b',
+    caseSensitive: false,
+  );
+
+  static bool isCompilation(Track track) =>
+      _compilation.hasMatch(track.title) || (track.duration ?? 0) > 900;
+
   /// Shared with the Google import, which receives the same messy titles.
   static String cleanTrackTitle(String raw, String artist) {
     var title = raw.replaceAll(_noise, ' ').replaceAll(_noiseTail, '');

@@ -92,6 +92,11 @@ class MiniPlayer extends StatelessWidget {
                             icon: const Icon(Icons.skip_next),
                             onPressed: services.handler.skipToNext,
                           ),
+                          IconButton(
+                            tooltip: 'Close player',
+                            icon: const Icon(Icons.close, size: 20),
+                            onPressed: services.handler.dismiss,
+                          ),
                         ],
                       ),
                     ),

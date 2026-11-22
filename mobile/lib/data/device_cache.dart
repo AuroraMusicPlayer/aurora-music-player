@@ -79,6 +79,33 @@ class DeviceCache {
         results.contains(ConnectivityResult.ethernet);
   }
 
+  /// True when the file is a container Apple's decoder accepts.
+  ///
+  /// Older builds cached YouTube's DASH fragments (`ftypdash`), which AVPlayer
+  /// rejects with -11800. Checking the brand costs twelve bytes and turns an
+  /// unplayable cache entry into an automatic re-download.
+  Future<bool> isPlayableFile(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return false;
+      if (await file.length() < 1024) return false;
+
+      final handle = await file.open();
+      try {
+        final head = await handle.read(12);
+        if (head.length < 12) return false;
+        final brand = String.fromCharCodes(head.sublist(4, 12));
+        if (!brand.startsWith('ftyp')) return false;
+        if (brand.contains('dash')) return false;
+        return true;
+      } finally {
+        await handle.close();
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Returns the updated track, or null when the download was skipped.
   Future<Track?> download(Track track, {String origin = 'manual', bool force = false}) async {
     if (track.isCached) return track;

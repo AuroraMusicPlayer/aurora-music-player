@@ -85,18 +85,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 }
 
-class _PlayerBody extends StatelessWidget {
+class _PlayerBody extends StatefulWidget {
   const _PlayerBody({required this.services, required this.track});
 
   final AppServices services;
   final Track track;
 
   @override
+  State<_PlayerBody> createState() => _PlayerBodyState();
+}
+
+class _PlayerBodyState extends State<_PlayerBody> {
+  double _drag = 0;
+
+  @override
   Widget build(BuildContext context) {
+    final services = widget.services;
+    final track = widget.track;
+
     return GestureDetector(
-      // Drag down anywhere near the top to dismiss, like a sheet.
+      // Measure the drag rather than only the release velocity: a slow, long
+      // swipe down should close the player too.
+      onVerticalDragStart: (_) => _drag = 0,
+      onVerticalDragUpdate: (details) {
+        _drag += details.delta.dy;
+        if (_drag > 90) {
+          _drag = 0;
+          Navigator.of(context).maybePop();
+        }
+      },
       onVerticalDragEnd: (details) {
-        if ((details.primaryVelocity ?? 0) > 300) Navigator.of(context).maybePop();
+        final velocity = details.primaryVelocity ?? 0;
+        _drag = 0;
+        if (velocity > 500) Navigator.of(context).maybePop();
       },
       child: Stack(
         children: [
@@ -106,7 +127,7 @@ class _PlayerBody extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
               child: Column(
                 children: [
-                  const _Grabber(),
+                  _PlayerHeader(onClose: () => Navigator.of(context).maybePop()),
                   const SizedBox(height: 12),
                   Hero(
                     tag: 'now-playing-art',
@@ -192,18 +213,39 @@ class _Backdrop extends StatelessWidget {
   }
 }
 
-class _Grabber extends StatelessWidget {
-  const _Grabber();
+/// Down-arrow to collapse the player, plus the grab handle.
+class _PlayerHeader extends StatelessWidget {
+  const _PlayerHeader({required this.onClose});
+
+  final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 36,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.white24,
-          borderRadius: BorderRadius.circular(2),
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Hide player',
+          onPressed: onClose,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 28),
         ),
-      );
+        const Expanded(
+          child: Center(
+            child: SizedBox(
+              width: 36,
+              height: 4,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.all(Radius.circular(2)),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 48),
+      ],
+    );
+  }
 }
 
 class _PositionBar extends StatelessWidget {
