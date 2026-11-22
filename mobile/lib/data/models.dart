@@ -147,3 +147,13 @@ class Playlist {
         thumbnail: row['thumbnail'] as String?,
       );
 }
+
+
+/// An artist derived from listening history, with a representative image.
+class ArtistRef {
+  const ArtistRef({required this.name, this.thumbnail, this.plays = 0});
+
+  final String name;
+  final String? thumbnail;
+  final int plays;
+}

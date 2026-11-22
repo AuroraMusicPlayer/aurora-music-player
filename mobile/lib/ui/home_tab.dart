@@ -101,13 +101,15 @@ class _HomeTabState extends State<HomeTab> {
     widget.services.handler.playTracks(tracks, startIndex: index);
   }
 
-  void _openMood(String mood) {
+  void _openMood(String mood) => _openQuery(mood, '$mood music mix');
+
+  void _openQuery(String title, String query) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SearchResultsScreen(
           services: widget.services,
-          title: mood,
-          query: '$mood music mix',
+          title: title,
+          query: query,
         ),
       ),
     );
@@ -228,6 +230,29 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ),
         ),
+        if (feed.artists.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 20, 16, 6),
+            child: Text('Your artists',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          SizedBox(
+            height: 130,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: feed.artists.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final artist = feed.artists[index];
+                return ArtistCircle(
+                  artist: artist,
+                  onTap: () => _openQuery(artist.name, artist.name),
+                );
+              },
+            ),
+          ),
+        ],
         for (final shelf in shelves) ShelfView(shelf: shelf, onPlay: _play),
       ],
     );

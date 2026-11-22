@@ -28,16 +28,19 @@ class HomeFeed {
     required this.recent,
     required this.offline,
     required this.shelves,
+    this.artists = const [],
   });
 
   const HomeFeed.empty()
       : recent = const [],
         offline = const [],
-        shelves = const [];
+        shelves = const [],
+        artists = const [];
 
   final List<Track> recent;
   final List<Track> offline;
   final List<HomeShelf> shelves;
+  final List<ArtistRef> artists;
 
   bool get isEmpty => recent.isEmpty && offline.isEmpty && shelves.isEmpty;
 }
@@ -60,6 +63,7 @@ class Recommendations {
     final played = await library.mostPlayed(limit: 20);
     final offline = await library.cached();
     final topArtists = await library.topArtists(limit: 2, minPlays: 2);
+    final artistRefs = await library.artistRefs(limit: 12);
 
     final shelves = <HomeShelf>[];
 
@@ -118,7 +122,12 @@ class Recommendations {
       }
     }
 
-    return HomeFeed(recent: recent, offline: offline, shelves: shelves);
+    return HomeFeed(
+      recent: recent,
+      offline: offline,
+      shelves: shelves,
+      artists: artistRefs,
+    );
   }
 
   /// Interleaves top plays with recently played, skipping duplicates.

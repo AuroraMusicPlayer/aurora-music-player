@@ -162,6 +162,52 @@ class ShelfView extends StatelessWidget {
   }
 }
 
+/// Circular artist card, the way YouTube Music and Spotify show people.
+class ArtistCircle extends StatelessWidget {
+  const ArtistCircle({super.key, required this.artist, required this.onTap});
+
+  final ArtistRef artist;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 104,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(52),
+        child: Column(
+          children: [
+            ClipOval(
+              child: SizedBox(
+                width: 96,
+                height: 96,
+                child: artist.thumbnail == null
+                    ? const ColoredBox(
+                        color: Color(0xFF1E1E1E),
+                        child: Icon(Icons.person, color: Colors.white38),
+                      )
+                    : Image.network(artist.thumbnail!, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const ColoredBox(
+                            color: Color(0xFF1E1E1E),
+                            child: Icon(Icons.person, color: Colors.white38))),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              artist.name,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Small progress bar under the mini player.
 class NowPlayingBar extends StatelessWidget {
   const NowPlayingBar({super.key, required this.position, required this.duration});

@@ -227,6 +227,31 @@ class Library {
     return rows.map(Track.fromRow).toList(growable: false);
   }
 
+  /// Artists with their most recent artwork, for the circular home row.
+  Future<List<ArtistRef>> artistRefs({int limit = 12}) async {
+    final rows = await _db.rawQuery('''
+      SELECT artist,
+             (SELECT t2.thumbnail FROM tracks t2
+               WHERE t2.artist = tracks.artist AND t2.thumbnail IS NOT NULL
+               ORDER BY t2.last_played DESC LIMIT 1) AS thumbnail,
+             SUM(play_count) AS plays
+      FROM tracks
+      WHERE play_count > 0 AND artist <> 'Unknown artist'
+      GROUP BY artist
+      ORDER BY plays DESC, artist ASC
+      LIMIT ?
+    ''', [limit]);
+
+    return rows
+        .map((r) => ArtistRef(
+              name: (r['artist'] as String?) ?? '',
+              thumbnail: r['thumbnail'] as String?,
+              plays: (r['plays'] as num?)?.toInt() ?? 0,
+            ))
+        .where((a) => a.name.isNotEmpty)
+        .toList(growable: false);
+  }
+
   /// Artists ranked by total plays — the seed for "Because you played…".
   Future<List<String>> topArtists({int limit = 5, int minPlays = 1}) async {
     final rows = await _db.rawQuery('''
