@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 /// Scopes are requested separately from sign-in in google_sign_in 7.x, so the
 /// app only asks for library access when you actually import something.
-const youtubeReadonlyScope =
-    'https://www.googleapis.com/auth/youtube.readonly';
+/// Read/write on the account's YouTube data. Needed for two-way sync: likes
+/// and playlists are written back, not just read.
+const youtubeWriteScope = 'https://www.googleapis.com/auth/youtube';
 
 /// Supplied at build time:
 ///   flutter build apk --dart-define=GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
@@ -11,6 +13,17 @@ const youtubeReadonlyScope =
 /// Kept out of source on purpose: it identifies the app, it is not a secret,
 /// but hardcoding it would tie the repository to one developer account.
 const googleClientId = String.fromEnvironment('GOOGLE_CLIENT_ID');
+
+/// The *Web* client id. Android's Credential Manager presents this as the
+/// server client during token exchange; without it, sign-in fails with
+/// ApiException 10 (DEVELOPER_ERROR).
+const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
+
+/// Android matches its OAuth client by package name + SHA-1, so this id is not
+/// sent anywhere — but recording it makes the build configuration complete and
+/// self-documenting.
+const googleAndroidClientId =
+    String.fromEnvironment('GOOGLE_ANDROID_CLIENT_ID');
 
 class GoogleUser {
   const GoogleUser({this.email, this.displayName, this.photoUrl});
@@ -33,7 +46,17 @@ class GoogleAccountException implements Exception {
 class GoogleAccount {
   bool _initialized = false;
 
-  bool get isConfigured => googleClientId.isNotEmpty;
+  /// iOS needs its own client id compiled in (plus the reversed URL scheme);
+  /// Android only needs the OAuth client to exist in the project, matched by
+  /// package + SHA-1. Reporting "configured" on the wrong platform would show
+  /// a button that cannot work.
+  bool get isConfigured {
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return googleClientId.isNotEmpty;
+    }
+    return googleAndroidClientId.isNotEmpty || googleServerClientId.isNotEmpty;
+  }
 
   GoogleSignInAccount? _account;
 
@@ -53,7 +76,13 @@ class GoogleAccount {
         '--dart-define=GOOGLE_CLIENT_ID=<your OAuth client id>.',
       );
     }
-    await GoogleSignIn.instance.initialize(clientId: googleClientId);
+    await GoogleSignIn.instance.initialize(
+      // iOS uses the iOS client id directly; Android matches its package +
+      // SHA-1 through the Android client and needs the web client as server.
+      clientId: googleClientId.isEmpty ? null : googleClientId,
+      serverClientId:
+          googleServerClientId.isEmpty ? null : googleServerClientId,
+    );
     _initialized = true;
   }
 
@@ -84,7 +113,7 @@ class GoogleAccount {
     }
 
     final headers = await account.authorizationClient.authorizationHeaders(
-      [youtubeReadonlyScope],
+      [youtubeWriteScope],
       promptIfNecessary: true,
     );
     if (headers == null) {

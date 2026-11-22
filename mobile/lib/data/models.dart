@@ -131,6 +131,7 @@ class Playlist {
     required this.createdAt,
     this.trackCount = 0,
     this.thumbnail,
+    this.youtubeId,
   });
 
   final int id;
@@ -139,6 +140,9 @@ class Playlist {
   final int trackCount;
   final String? thumbnail;
 
+  /// Set when this playlist is linked to a YouTube Music playlist.
+  final String? youtubeId;
+
   factory Playlist.fromRow(Map<String, Object?> row) => Playlist(
         id: (row['id'] as num).toInt(),
         name: row['name'] as String,
@@ -146,6 +150,7 @@ class Playlist {
             ((row['created_at'] as num?) ?? 0).toInt()),
         trackCount: (row['track_count'] as num?)?.toInt() ?? 0,
         thumbnail: row['thumbnail'] as String?,
+        youtubeId: row['youtube_id'] as String?,
       );
 }
 

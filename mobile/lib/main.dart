@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'app_events.dart';
 import 'debug_harness.dart';
+import 'debug_signin.dart';
 import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
 import 'data/artwork_cache.dart';
@@ -61,6 +62,10 @@ Future<void> main() async {
       ),
     ),
   );
+
+  // No-op unless AURORA_DEMO_SIGNIN is set.
+  // ignore: unawaited_futures
+  runSignInProbe(google);
 
   // No-op unless the simulator QA define is set.
   // ignore: unawaited_futures

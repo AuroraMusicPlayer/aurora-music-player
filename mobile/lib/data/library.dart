@@ -14,13 +14,15 @@ class Library {
     final path = p.join(await getDatabasesPath(), 'aurora.db');
     final db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await _createTracks(db);
         await _createPlaylists(db);
+        await _createSync(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createPlaylists(db);
+        if (oldVersion < 3) await _createSync(db);
       },
     );
     return Library(db);
@@ -66,6 +68,19 @@ class Library {
     ''');
     await db.execute(
         'CREATE INDEX playlist_tracks_order ON playlist_tracks(playlist_id, position)');
+  }
+
+  /// Link between local rows and their YouTube Music counterparts.
+  static Future<void> _createSync(Database db) async {
+    await db.execute('ALTER TABLE playlists ADD COLUMN youtube_id TEXT');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_state(
+        kind TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        PRIMARY KEY (kind, key)
+      )
+    ''');
   }
 
   Future<Track?> byId(String id) async {
@@ -278,7 +293,7 @@ class Library {
 
   Future<List<Playlist>> playlists() async {
     final rows = await _db.rawQuery('''
-      SELECT p.id, p.name, p.created_at,
+      SELECT p.id, p.name, p.created_at, p.youtube_id,
              COUNT(pt.track_id) AS track_count,
              (SELECT t.thumbnail FROM playlist_tracks pt2
                 JOIN tracks t ON t.id = pt2.track_id
@@ -290,6 +305,33 @@ class Library {
       ORDER BY p.created_at DESC
     ''');
     return rows.map(Playlist.fromRow).toList(growable: false);
+  }
+
+  Future<void> setPlaylistYoutubeId(int id, String youtubeId) async {
+    await _db.update('playlists', {'youtube_id': youtubeId},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Playlist?> playlistByYoutubeId(String youtubeId) async {
+    final rows = await _db.query('playlists',
+        where: 'youtube_id = ?', whereArgs: [youtubeId], limit: 1);
+    if (rows.isEmpty) return null;
+    return Playlist.fromRow(rows.first);
+  }
+
+  Future<String?> syncValue(String kind, String key) async {
+    final rows = await _db.query('sync_state',
+        where: 'kind = ? AND key = ?', whereArgs: [kind, key], limit: 1);
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  Future<void> setSyncValue(String kind, String key, String? value) async {
+    await _db.insert(
+      'sync_state',
+      {'kind': kind, 'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<int> createPlaylist(String name) async {

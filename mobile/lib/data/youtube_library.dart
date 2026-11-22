@@ -11,9 +11,13 @@ class LibraryPlaylist {
     required this.title,
     required this.tracks,
     this.thumbnail,
+    this.remoteId,
   });
 
   final String title;
+
+  /// YouTube playlist id, used to link the local copy.
+  final String? remoteId;
   final List<Track> tracks;
   final String? thumbnail;
 }
@@ -120,6 +124,7 @@ class YouTubeLibrary {
         title: summary.title,
         tracks: tracks,
         thumbnail: summary.thumbnail,
+        remoteId: summary.id,
       ));
     }
     onProgress?.call(summaries.length, summaries.length);

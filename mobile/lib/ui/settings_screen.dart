@@ -4,6 +4,7 @@ import '../app.dart';
 import '../data/google_account.dart';
 import '../data/models.dart';
 import 'google_import.dart';
+import 'youtube_sync_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.services});
@@ -66,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : const Icon(Icons.login),
           title: const Text('Connect Google account'),
           subtitle: const Text(
-            'Read-only access to import your YouTube playlists and liked songs',
+            'Import your YouTube playlists and liked songs, and keep them in sync',
             style: TextStyle(fontSize: 12),
           ),
           onTap: _connecting ? null : _connect,
@@ -78,12 +79,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ListTile(
         leading: const Icon(Icons.account_circle_outlined),
         title: Text(user.email ?? 'Connected'),
-        subtitle: const Text('YouTube read-only access',
+        subtitle: const Text('YouTube library access',
             style: TextStyle(fontSize: 12)),
         trailing: TextButton(
           onPressed: _disconnect,
           child: const Text('Sign out'),
         ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.sync),
+        title: const Text('Sync with YouTube Music'),
+        subtitle: const Text(
+          'Likes and playlists, both directions. Additions only — nothing is '
+          'deleted remotely.',
+          style: TextStyle(fontSize: 12),
+        ),
+        onTap: () => showYoutubeSync(context, services, onDone: () => setState(() {})),
       ),
       ListTile(
         leading: const Icon(Icons.cloud_download_outlined),
@@ -201,8 +212,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
                 child: Text(
-                  'Aurora Music — personal build. Audio is resolved by your own Mac '
-                  'and cached locally. Android Auto and CarPlay arrive in a later phase.',
+                  'Aurora Music — personal build. Audio is resolved on the device '
+                  'and cached locally; no server is involved. Android Auto browsing '
+                  'is supported; CarPlay needs an Apple-granted entitlement that '
+                  'self-signed builds cannot obtain.',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
