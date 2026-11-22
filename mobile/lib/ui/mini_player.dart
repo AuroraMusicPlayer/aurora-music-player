@@ -25,7 +25,7 @@ class MiniPlayer extends StatelessWidget {
             final playing = playbackSnapshot.data?.playing ?? false;
 
             return Material(
-              color: const Color(0xFF1A1A1A),
+              color: const Color(0xFF141414),
               child: InkWell(
                 onTap: () => showPlayerSheet(context, services),
                 child: Column(
@@ -49,17 +49,20 @@ class MiniPlayer extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
                       child: Row(
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: SizedBox(
-                              width: 44,
-                              height: 44,
-                              child: item.artUri == null
-                                  ? const ColoredBox(color: Color(0xFF2A2A2A))
-                                  : Image.network(item.artUri.toString(),
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
-                                          const ColoredBox(color: Color(0xFF2A2A2A))),
+                          Hero(
+                            tag: 'now-playing-art',
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 46,
+                                height: 46,
+                                child: item.artUri == null
+                                    ? const ColoredBox(color: Color(0xFF2A2A2A))
+                                    : Image.network(item.artUri.toString(),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const ColoredBox(
+                                            color: Color(0xFF2A2A2A))),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),

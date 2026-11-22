@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
@@ -7,92 +9,175 @@ import 'lyrics_sheet.dart';
 import 'playlist_dialogs.dart';
 import 'queue_sheet.dart';
 
+/// Opens the full player. Slides up over the tabs, and the artwork grows out
+/// of the mini player.
 Future<void> showPlayerSheet(BuildContext context, AppServices services) {
-  return showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    backgroundColor: const Color(0xFF101010),
-    builder: (_) => PlayerSheet(services: services),
+  return Navigator.of(context).push(
+    PageRouteBuilder<void>(
+      opaque: false,
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 340),
+      reverseTransitionDuration: const Duration(milliseconds: 260),
+      pageBuilder: (_, __, ___) => PlayerScreen(services: services),
+      transitionsBuilder: (_, animation, __, child) {
+        final curved =
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return SlideTransition(
+          position: Tween(begin: const Offset(0, 1), end: Offset.zero)
+              .animate(curved),
+          child: child,
+        );
+      },
+    ),
   );
 }
 
-class PlayerSheet extends StatelessWidget {
-  const PlayerSheet({super.key, required this.services});
+class PlayerScreen extends StatelessWidget {
+  const PlayerScreen({super.key, required this.services});
 
   final AppServices services;
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Track?>(
-      valueListenable: services.handler.activeTrack,
-      builder: (context, track, _) {
-        if (track == null) {
-          return const SizedBox(height: 200, child: Center(child: Text('Nothing playing')));
-        }
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                // Swipe the artwork: right = next, left = previous. Cheap to
-                // add and it is what people try first.
-                onHorizontalDragEnd: (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (velocity < -250) {
-                    services.handler.skipToNext();
-                  } else if (velocity > 250) {
-                    services.handler.skipToPrevious();
-                  }
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: track.thumbnail == null
-                        ? const ColoredBox(color: Color(0xFF1E1E1E))
-                        : Image.network(track.thumbnail!, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const ColoredBox(color: Color(0xFF1E1E1E))),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                track.title,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                track.artist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white54),
-              ),
-              const SizedBox(height: 16),
-              _PositionBar(services: services),
-              const SizedBox(height: 4),
-              _Controls(services: services),
-              const SizedBox(height: 8),
-              _Actions(services: services, track: track),
-              const SizedBox(height: 4),
-              _Tools(services: services, track: track),
-              const SizedBox(height: 8),
-              _CacheRow(services: services, track: track),
-            ],
-          ),
-        );
-      },
+    return Scaffold(
+      backgroundColor: const Color(0xFF070707),
+      body: ValueListenableBuilder<Track?>(
+        valueListenable: services.handler.activeTrack,
+        builder: (context, track, _) {
+          if (track == null) {
+            return const Center(child: Text('Nothing playing'));
+          }
+          return _PlayerBody(services: services, track: track);
+        },
+      ),
     );
   }
+}
+
+class _PlayerBody extends StatelessWidget {
+  const _PlayerBody({required this.services, required this.track});
+
+  final AppServices services;
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      // Drag down anywhere near the top to dismiss, like a sheet.
+      onVerticalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) > 300) Navigator.of(context).maybePop();
+      },
+      child: Stack(
+        children: [
+          _Backdrop(track: track),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+              child: Column(
+                children: [
+                  const _Grabber(),
+                  const SizedBox(height: 12),
+                  Hero(
+                    tag: 'now-playing-art',
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: track.thumbnail == null
+                            ? const ColoredBox(color: Color(0xFF1E1E1E))
+                            : Image.network(track.thumbnail!, fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const ColoredBox(color: Color(0xFF1E1E1E))),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    track.title,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                      height: 1.15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    track.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, color: Colors.white60),
+                  ),
+                  const SizedBox(height: 22),
+                  _PositionBar(services: services),
+                  const SizedBox(height: 6),
+                  _Controls(services: services),
+                  const SizedBox(height: 10),
+                  _Tools(services: services, track: track),
+                  const SizedBox(height: 14),
+                  _Actions(services: services, track: track),
+                  const SizedBox(height: 16),
+                  _CacheRow(services: services, track: track),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Blurred, darkened artwork behind everything.
+class _Backdrop extends StatelessWidget {
+  const _Backdrop({required this.track});
+
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (track.thumbnail != null)
+            Image.network(track.thumbnail!, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF101010))),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
+            child: const ColoredBox(color: Color(0xCC000000)),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Color(0xE6000000)],
+                stops: [0.35, 1],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Grabber extends StatelessWidget {
+  const _Grabber();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 36,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white24,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
 }
 
 class _PositionBar extends StatelessWidget {
@@ -102,6 +187,8 @@ class _PositionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+
     return StreamBuilder<Duration>(
       stream: services.handler.player.positionStream,
       builder: (context, positionSnapshot) {
@@ -111,26 +198,47 @@ class _PositionBar extends StatelessWidget {
             final duration = durationSnapshot.data ?? Duration.zero;
             final position = positionSnapshot.data ?? Duration.zero;
             final max = duration.inMilliseconds.toDouble();
-            final value = position.inMilliseconds.toDouble().clamp(0, max <= 0 ? 1 : max);
+            final value =
+                position.inMilliseconds.toDouble().clamp(0, max <= 0 ? 1 : max);
 
             return Column(
               children: [
-                Slider(
-                  value: max <= 0 ? 0 : value.toDouble(),
-                  max: max <= 0 ? 1 : max,
-                  onChanged: max <= 0
-                      ? null
-                      : (v) => services.handler.seek(Duration(milliseconds: v.round())),
+                SizedBox(
+                  height: 28,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                      activeTrackColor: accent,
+                      inactiveTrackColor: Colors.white24,
+                      thumbColor: Colors.white,
+                    ),
+                    child: Slider(
+                      value: max <= 0 ? 0 : value.toDouble(),
+                      max: max <= 0 ? 1 : max,
+                      onChanged: max <= 0
+                          ? null
+                          : (v) =>
+                              services.handler.seek(Duration(milliseconds: v.round())),
+                    ),
+                  ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(_clock(position),
-                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                              fontFeatures: [FontFeature.tabularFigures()])),
                       Text(_clock(duration),
-                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                              fontFeatures: [FontFeature.tabularFigures()])),
                     ],
                   ),
                 ),
@@ -166,30 +274,38 @@ class _Controls extends StatelessWidget {
         final repeat = state?.repeatMode ?? AudioServiceRepeatMode.none;
 
         return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             IconButton(
               tooltip: 'Shuffle',
+              iconSize: 22,
               icon: Icon(Icons.shuffle, color: shuffle ? accent : Colors.white54),
               onPressed: services.handler.toggleShuffle,
             ),
             IconButton(
-              iconSize: 34,
+              iconSize: 36,
               icon: const Icon(Icons.skip_previous),
               onPressed: services.handler.skipToPrevious,
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                shape: const CircleBorder(),
-                padding: const EdgeInsets.all(16),
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
               ),
-              onPressed: busy
-                  ? null
-                  : () => playing ? services.handler.pause() : services.handler.play(),
-              child: Icon(playing ? Icons.pause : Icons.play_arrow, size: 30),
+              child: IconButton(
+                iconSize: 36,
+                color: Colors.black,
+                padding: const EdgeInsets.all(12),
+                onPressed: busy
+                    ? null
+                    : () => playing
+                        ? services.handler.pause()
+                        : services.handler.play(),
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+              ),
             ),
             IconButton(
-              iconSize: 34,
+              iconSize: 36,
               icon: const Icon(Icons.skip_next),
               onPressed: services.handler.skipToNext,
             ),
@@ -199,6 +315,7 @@ class _Controls extends StatelessWidget {
                   : repeat == AudioServiceRepeatMode.all
                       ? 'Repeat all'
                       : 'Repeat off',
+              iconSize: 22,
               icon: Icon(
                 repeat == AudioServiceRepeatMode.one ? Icons.repeat_one : Icons.repeat,
                 color: repeat == AudioServiceRepeatMode.none ? Colors.white54 : accent,
@@ -212,76 +329,6 @@ class _Controls extends StatelessWidget {
   }
 }
 
-class _Actions extends StatelessWidget {
-  const _Actions({required this.services, required this.track});
-
-  final AppServices services;
-  final Track track;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        IconButton(
-          tooltip: track.favorite ? 'Remove from liked' : 'Like',
-          onPressed: services.handler.toggleFavorite,
-          icon: Icon(
-            track.favorite ? Icons.favorite : Icons.favorite_border,
-            color: track.favorite ? Colors.redAccent : Colors.white70,
-          ),
-        ),
-        TextButton.icon(
-          onPressed: () => showAddToPlaylist(context, services, track),
-          icon: const Icon(Icons.playlist_add, size: 18),
-          label: const Text('Playlist'),
-        ),
-        ValueListenableBuilder<Map<String, double>>(
-          valueListenable: services.cache.progress,
-          builder: (context, progressMap, _) => ValueListenableBuilder<Set<String>>(
-          valueListenable: services.cache.downloading,
-          builder: (context, downloading, _) {
-            final busy = downloading.contains(track.id);
-            if (busy) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              );
-            }
-            return track.isCached
-                ? TextButton.icon(
-                    onPressed: () => services.cache.remove(track),
-                    icon: const Icon(Icons.offline_pin, size: 18, color: Colors.greenAccent),
-                    label: const Text('Saved'),
-                  )
-                : TextButton.icon(
-                    onPressed: () => services.cache
-                        .download(track, origin: 'manual', force: true)
-                        .catchError((Object e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text('$e')));
-                      }
-                      return null;
-                    }),
-                    icon: const Icon(Icons.download_outlined, size: 18),
-                    label: Text(progressMap[track.id] == null
-                        ? 'Download'
-                        : '${(progressMap[track.id]! * 100).round()}%'),
-                  );
-          },
-        ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Lyrics, queue, speed and sleep timer.
 class _Tools extends StatelessWidget {
   const _Tools({required this.services, required this.track});
 
@@ -387,7 +434,7 @@ class _ToolButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -398,6 +445,72 @@ class _ToolButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _Actions extends StatelessWidget {
+  const _Actions({required this.services, required this.track});
+
+  final AppServices services;
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        IconButton(
+          tooltip: track.favorite ? 'Remove from liked' : 'Like',
+          onPressed: services.handler.toggleFavorite,
+          icon: Icon(
+            track.favorite ? Icons.favorite : Icons.favorite_border,
+            color: track.favorite ? Colors.redAccent : Colors.white70,
+          ),
+        ),
+        TextButton.icon(
+          onPressed: () => showAddToPlaylist(context, services, track),
+          icon: const Icon(Icons.playlist_add, size: 18),
+          label: const Text('Playlist'),
+        ),
+        ValueListenableBuilder<Map<String, double>>(
+          valueListenable: services.cache.progress,
+          builder: (context, progressMap, _) =>
+              ValueListenableBuilder<Set<String>>(
+            valueListenable: services.cache.downloading,
+            builder: (context, downloading, _) {
+              if (downloading.contains(track.id)) {
+                final pct = progressMap[track.id];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(pct == null ? '…' : '${(pct * 100).round()}%',
+                      style: const TextStyle(color: Colors.white54)),
+                );
+              }
+              return track.isCached
+                  ? TextButton.icon(
+                      onPressed: () => services.cache.remove(track),
+                      icon: const Icon(Icons.offline_pin,
+                          size: 18, color: Colors.greenAccent),
+                      label: const Text('Saved'),
+                    )
+                  : TextButton.icon(
+                      onPressed: () => services.cache
+                          .download(track, origin: 'manual', force: true)
+                          .catchError((Object e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text('$e')));
+                        }
+                        return null;
+                      }),
+                      icon: const Icon(Icons.download_outlined, size: 18),
+                      label: const Text('Download'),
+                    );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -416,8 +529,8 @@ class _CacheRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
