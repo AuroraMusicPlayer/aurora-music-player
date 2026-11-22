@@ -106,6 +106,25 @@ class GoogleAccount {
       _account = await GoogleSignIn.instance.authenticate();
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) return null;
+      final description = (error.description ?? '').toLowerCase();
+
+      // Android refuses to sign in without a server client; the engine error
+      // says so in its own words, which is unhelpful in a settings screen.
+      if (description.contains('server client') ||
+          description.contains('serverclientid')) {
+        throw const GoogleAccountException(
+          'Android needs a Web application OAuth client as its server client. '
+          'Create one in Google Cloud Console (type: Web application) and '
+          'rebuild with GOOGLE_SERVER_CLIENT_ID set to that client id.',
+        );
+      }
+      if (description.contains('invalid_client') ||
+          description.contains('deleted_client')) {
+        throw const GoogleAccountException(
+          'Google rejected this build\'s client id. Check that the Android '
+          'client matches this app\'s package name and signing SHA-1.',
+        );
+      }
       throw GoogleAccountException(error.description ?? error.code.name);
     }
     return user;
