@@ -34,6 +34,9 @@ class DeviceCache {
   /// Lets the UI show a spinner on the track being saved.
   final ValueNotifier<Set<String>> downloading = ValueNotifier<Set<String>>({});
 
+  /// 0..1 per track id while a download is running.
+  final ValueNotifier<Map<String, double>> progress = ValueNotifier<Map<String, double>>({});
+
   bool isDownloading(String id) => _downloading.contains(id);
 
   void _setDownloading(String id, bool active) {
@@ -43,6 +46,13 @@ class DeviceCache {
       _downloading.remove(id);
     }
     downloading.value = {..._downloading};
+    if (!active) {
+      progress.value = {...progress.value}..remove(id);
+    }
+  }
+
+  void _setProgress(String id, double value) {
+    progress.value = {...progress.value, id: value.clamp(0.0, 1.0)};
   }
 
   Future<Directory> _audioDir() async {
@@ -85,7 +95,8 @@ class DeviceCache {
       partial = File('${target.path}.part');
 
       final resolved = await source.stream(track.id);
-      await _fetchToFile(resolved.url, partial);
+      await _fetchToFile(resolved.url, partial,
+          id: track.id, expected: resolved.bytes);
 
       final length = await partial.length();
       if (length < 1024) {
@@ -116,7 +127,12 @@ class DeviceCache {
     }
   }
 
-  Future<void> _fetchToFile(String url, File destination) async {
+  Future<void> _fetchToFile(
+    String url,
+    File destination, {
+    String? id,
+    int? expected,
+  }) async {
     var uri = Uri.parse(url);
 
     for (var hop = 0; hop < 4; hop++) {
@@ -142,9 +158,17 @@ class DeviceCache {
         );
       }
 
+      final total = expected ?? response.contentLength;
       final sink = destination.openWrite();
+      var written = 0;
       try {
-        await response.pipe(sink);
+        await for (final chunk in response) {
+          written += chunk.length;
+          sink.add(chunk);
+          if (id != null && total > 0) {
+            _setProgress(id, written / total);
+          }
+        }
       } finally {
         await sink.close();
       }
@@ -152,6 +176,31 @@ class DeviceCache {
     }
 
     throw const YouTubeSourceException('Too many redirects');
+  }
+
+  /// Saves every track that is not cached yet, one at a time.
+  ///
+  /// Sequential on purpose: parallel downloads from googlevideo are what make
+  /// YouTube throttle a device.
+  Future<int> downloadAll(
+    List<Track> tracks, {
+    String origin = 'manual',
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final pending = tracks.where((t) => !t.isCached).toList(growable: false);
+    var saved = 0;
+
+    for (var i = 0; i < pending.length; i++) {
+      onProgress?.call(i, pending.length);
+      try {
+        final result = await download(pending[i], origin: origin);
+        if (result != null) saved++;
+      } catch (_) {
+        // Keep going: one unavailable song should not abandon the batch.
+      }
+    }
+    onProgress?.call(pending.length, pending.length);
+    return saved;
   }
 
   Future<void> remove(Track track) async {
@@ -181,5 +230,6 @@ class DeviceCache {
   void dispose() {
     _client.close(force: true);
     downloading.dispose();
+    progress.dispose();
   }
 }

@@ -23,6 +23,8 @@ class _HomeTabState extends State<HomeTab> {
   bool _loading = false;
   String? _error;
   DateTime? _loadedAt;
+  Track? _continueTrack;
+  Duration _continueAt = Duration.zero;
 
   /// Rebuilding the feed costs YouTube searches, and Google blocks devices
   /// that ask too often. Recompute at most this often; pull-to-refresh always
@@ -33,6 +35,7 @@ class _HomeTabState extends State<HomeTab> {
   void initState() {
     super.initState();
     widget.services.events.revision.addListener(_onLibraryChanged);
+    _loadContinue();
     _load();
   }
 
@@ -46,6 +49,28 @@ class _HomeTabState extends State<HomeTab> {
     final loadedAt = _loadedAt;
     if (loadedAt == null || DateTime.now().difference(loadedAt) > _feedTtl) {
       _load();
+    }
+  }
+
+  /// Where you stopped last time, so the app opens with a way back in.
+  Future<void> _loadContinue() async {
+    final id = widget.services.memory.lastTrackId;
+    if (id == null) return;
+    final track = await widget.services.library.byId(id);
+    if (!mounted || track == null) return;
+    setState(() {
+      _continueTrack = track;
+      _continueAt = widget.services.memory.lastPosition;
+    });
+  }
+
+  Future<void> _resume() async {
+    final track = _continueTrack;
+    if (track == null) return;
+    final at = _continueAt;
+    await widget.services.handler.playTracks([track]);
+    if (at > const Duration(seconds: 5)) {
+      await widget.services.handler.seek(at);
     }
   }
 
@@ -177,6 +202,11 @@ class _HomeTabState extends State<HomeTab> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        if (_continueTrack != null) _ContinueCard(
+          track: _continueTrack!,
+          at: _continueAt,
+          onTap: _resume,
+        ),
         _MoodRow(onPick: _openMood),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -257,6 +287,85 @@ class _MoodRow extends StatelessWidget {
             onPressed: () => onPick(mood),
           );
         },
+      ),
+    );
+  }
+}
+
+
+/// "Pick up where you left off" — a single card, not a shelf.
+class _ContinueCard extends StatelessWidget {
+  const _ContinueCard({
+    required this.track,
+    required this.at,
+    required this.onTap,
+  });
+
+  final Track track;
+  final Duration at;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = track.duration == null || track.duration == 0
+        ? 0.0
+        : (at.inSeconds / track.duration!).clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: track.thumbnail == null
+                      ? const ColoredBox(color: Color(0xFF2A2A2A))
+                      : Image.network(track.thumbnail!, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const ColoredBox(color: Color(0xFF2A2A2A))),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Pick up where you left off',
+                        style: TextStyle(fontSize: 10, color: Colors.white38)),
+                    const SizedBox(height: 2),
+                    Text(track.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 2,
+                        backgroundColor: Colors.white12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.play_circle_fill, size: 34),
+            ],
+          ),
+        ),
       ),
     );
   }

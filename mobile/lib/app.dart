@@ -4,6 +4,7 @@ import 'app_events.dart';
 import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
 import 'data/library.dart';
+import 'data/playback_memory.dart';
 import 'data/youtube_source.dart';
 import 'settings.dart';
 import 'ui/home_screen.dart';
@@ -17,6 +18,7 @@ class AppServices {
     required this.cache,
     required this.handler,
     required this.events,
+    required this.memory,
   });
 
   final Settings settings;
@@ -25,6 +27,7 @@ class AppServices {
   final DeviceCache cache;
   final AuroraAudioHandler handler;
   final AppEvents events;
+  final PlaybackMemory memory;
 }
 
 class AuroraApp extends StatelessWidget {

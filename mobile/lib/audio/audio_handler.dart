@@ -10,6 +10,7 @@ import '../data/auto_cache_policy.dart';
 import '../data/device_cache.dart';
 import '../data/library.dart';
 import '../data/models.dart';
+import '../data/playback_memory.dart';
 import '../data/youtube_source.dart';
 import '../settings.dart';
 
@@ -25,6 +26,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     required this.cache,
     required this.settings,
     required this.events,
+    this.memory,
   }) {
     _player.playbackEventStream.listen(
       _broadcastState,
@@ -45,6 +47,9 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   final DeviceCache cache;
   final Settings settings;
   final AppEvents events;
+  final PlaybackMemory? memory;
+
+  DateTime _lastSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   AutoCachePolicy get policy => AutoCachePolicy(
         enabled: settings.autoCacheEnabled,
@@ -183,7 +188,13 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   Future<void> play() => _player.play();
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    await _player.pause();
+    final track = _active;
+    if (track != null) {
+      unawaited(memory?.save(track, _player.position) ?? Future<void>.value());
+    }
+  }
 
   @override
   Future<void> stop() async {
@@ -446,6 +457,14 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   void _onPosition(Duration position) {
     final track = _active;
     if (track == null) return;
+
+    // Persist roughly every ten seconds so a relaunch can resume. Written on
+    // the position stream rather than a timer so it stops when playback stops.
+    final now = DateTime.now();
+    if (now.difference(_lastSavedAt) > const Duration(seconds: 10)) {
+      _lastSavedAt = now;
+      unawaited(memory?.save(track, position) ?? Future<void>.value());
+    }
 
     if (!_activeStarted && position > const Duration(seconds: 1)) {
       _activeStarted = true;

@@ -55,6 +55,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             onPressed: _rename,
           ),
           IconButton(
+            tooltip: 'Download all',
+            icon: const Icon(Icons.download_for_offline_outlined),
+            onPressed: _tracks.isEmpty ? null : _downloadAll,
+          ),
+          IconButton(
             tooltip: 'Delete playlist',
             icon: const Icon(Icons.delete_outline),
             onPressed: _delete,
@@ -133,6 +138,25 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   ],
                 ),
     );
+  }
+
+  Future<void> _downloadAll() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final total = _tracks.where((t) => !t.isCached).length;
+    if (total == 0) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Everything here is already saved')));
+      return;
+    }
+
+    messenger.showSnackBar(SnackBar(
+      content: Text('Saving $total songs… they download one at a time'),
+      duration: const Duration(seconds: 4),
+    ));
+
+    final saved = await widget.services.cache.downloadAll(_tracks);
+    await _load();
+    messenger.showSnackBar(SnackBar(content: Text('Saved $saved of $total')));
   }
 
   Future<void> _rename() async {

@@ -36,15 +36,27 @@ class PlayerSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: track.thumbnail == null
-                      ? const ColoredBox(color: Color(0xFF1E1E1E))
-                      : Image.network(track.thumbnail!, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const ColoredBox(color: Color(0xFF1E1E1E))),
+              GestureDetector(
+                // Swipe the artwork: right = next, left = previous. Cheap to
+                // add and it is what people try first.
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (velocity < -250) {
+                    services.handler.skipToNext();
+                  } else if (velocity > 250) {
+                    services.handler.skipToPrevious();
+                  }
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: track.thumbnail == null
+                        ? const ColoredBox(color: Color(0xFF1E1E1E))
+                        : Image.network(track.thumbnail!, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                const ColoredBox(color: Color(0xFF1E1E1E))),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -224,7 +236,9 @@ class _Actions extends StatelessWidget {
           icon: const Icon(Icons.playlist_add, size: 18),
           label: const Text('Playlist'),
         ),
-        ValueListenableBuilder<Set<String>>(
+        ValueListenableBuilder<Map<String, double>>(
+          valueListenable: services.cache.progress,
+          builder: (context, progressMap, _) => ValueListenableBuilder<Set<String>>(
           valueListenable: services.cache.downloading,
           builder: (context, downloading, _) {
             final busy = downloading.contains(track.id);
@@ -255,9 +269,12 @@ class _Actions extends StatelessWidget {
                       return null;
                     }),
                     icon: const Icon(Icons.download_outlined, size: 18),
-                    label: const Text('Download'),
+                    label: Text(progressMap[track.id] == null
+                        ? 'Download'
+                        : '${(progressMap[track.id]! * 100).round()}%'),
                   );
           },
+        ),
         ),
       ],
     );

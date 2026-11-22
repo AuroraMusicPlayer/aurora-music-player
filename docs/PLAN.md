@@ -124,7 +124,30 @@ Requirements, all reachable without store review:
 - iOS sideload reality: with a free Apple ID, builds expire after 7 days. With a
   paid developer account, self-signed builds last a year. Budget for that.
 
-## 7. Phases
+## 7. Status
+
+Shipped (see GitHub releases):
+
+| Version | Content |
+| --- | --- |
+| v0.1.x | first installable builds; playback fixed to the progressive MP4 stream |
+| v0.2.x | home feed from listening history, YT Music-style layout, mediaItem fix, long-listen caching |
+| v0.3.x | shuffle/repeat, download button, playlists, Spotify + YouTube + text import, liked/offline/downloads shelves |
+| v0.4.x | Android Auto browse tree; vendor fix for "Streamed" search crash |
+| v0.5.x | queue editing, synced lyrics (lrclib), sleep timer, playback speed, autoplay |
+| v0.6.x | radio, personal mix, mood chips, Deezer charts, resume position, recent searches, real download %, download-all, sorting, swipe-to-skip |
+
+Deliberately excluded, with reasons:
+
+- **Lossless / HiFi** — YouTube serves no lossless audio.
+- **Hum-to-search** — requires an audio fingerprint service.
+- **AI DJ voice** — requires a backend and TTS.
+- **Casting** — requires the Cast SDK and a receiver.
+- **Accounts / sync** — needs OAuth credentials and a provider.
+- **CarPlay** — Apple gates it behind a manually granted entitlement.
+- **Equalizer on iOS** — `just_audio` has no iOS equalizer; Android only.
+
+## 8. Phases
 
 **Phase 1 — resolver (done)**
 - [x] `/search`, `/resolve`, `/audio` with Range support

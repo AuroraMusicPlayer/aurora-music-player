@@ -31,9 +31,12 @@ class TrackListScreen extends StatefulWidget {
   State<TrackListScreen> createState() => _TrackListScreenState();
 }
 
+enum TrackSort { recent, plays, title, artist }
+
 class _TrackListScreenState extends State<TrackListScreen> {
   List<Track> _tracks = const [];
   bool _loading = true;
+  TrackSort _sort = TrackSort.recent;
 
   @override
   void initState() {
@@ -45,9 +48,28 @@ class _TrackListScreenState extends State<TrackListScreen> {
     final tracks = await widget.load();
     if (!mounted) return;
     setState(() {
-      _tracks = tracks;
+      _tracks = _sorted(tracks);
       _loading = false;
     });
+  }
+
+  List<Track> _sorted(List<Track> tracks) {
+    final list = [...tracks];
+    switch (_sort) {
+      case TrackSort.plays:
+        list.sort((a, b) => b.playCount.compareTo(a.playCount));
+      case TrackSort.title:
+        list.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      case TrackSort.artist:
+        list.sort((a, b) => a.artist.toLowerCase().compareTo(b.artist.toLowerCase()));
+      case TrackSort.recent:
+        list.sort((a, b) {
+          final ad = a.lastPlayed ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bd = b.lastPlayed ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bd.compareTo(ad);
+        });
+    }
+    return list;
   }
 
   Future<void> _longPress(Track track) async {
@@ -65,6 +87,23 @@ class _TrackListScreenState extends State<TrackListScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          PopupMenuButton<TrackSort>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort),
+            initialValue: _sort,
+            onSelected: (value) {
+              setState(() {
+                _sort = value;
+                _tracks = _sorted(_tracks);
+              });
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: TrackSort.recent, child: Text('Recently played')),
+              PopupMenuItem(value: TrackSort.plays, child: Text('Most played')),
+              PopupMenuItem(value: TrackSort.title, child: Text('Title')),
+              PopupMenuItem(value: TrackSort.artist, child: Text('Artist')),
+            ],
+          ),
           if (_tracks.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 16),

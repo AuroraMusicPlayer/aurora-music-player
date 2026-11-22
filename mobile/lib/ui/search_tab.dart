@@ -55,6 +55,7 @@ class _SearchTabState extends State<SearchTab> {
       for (final track in results) {
         await widget.services.library.remember(track);
       }
+      await widget.services.memory.addSearch(q);
       if (!mounted) return;
       setState(() {
         _results = results;
@@ -251,15 +252,36 @@ class _SearchTabState extends State<SearchTab> {
       );
     }
     if (_results.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text(
-            'Search YouTube. Long-press a result to keep it offline.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54, fontSize: 13),
+      final recent = widget.services.memory.recentSearches;
+      return ListView(
+        children: [
+          if (recent.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('Recent searches',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            ),
+            for (final query in recent)
+              ListTile(
+                leading: const Icon(Icons.history, size: 18),
+                title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: const Icon(Icons.north_west, size: 14),
+                onTap: () {
+                  _controller.text = query;
+                  _search(query);
+                },
+              ),
+          ],
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Text(
+              'Search YouTube. Long-press a result to like it, download it or '
+              'start a radio.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
           ),
-        ),
+        ],
       );
     }
 
@@ -275,6 +297,7 @@ class _SearchTabState extends State<SearchTab> {
               track: track,
               cached: _cachedIds.contains(track.id),
               downloading: downloading.contains(track.id),
+              progress: widget.services.cache.progress.value[track.id],
               onTap: () => widget.services.handler
                   .playTracks(_results, startIndex: index),
               onLongPress: () => _showActions(track),
@@ -293,6 +316,7 @@ class _ResultTile extends StatelessWidget {
     required this.cached,
     required this.downloading,
     required this.onTap,
+    this.progress,
     required this.onLongPress,
     required this.onDownload,
   });
@@ -300,6 +324,7 @@ class _ResultTile extends StatelessWidget {
   final Track track;
   final bool cached;
   final bool downloading;
+  final double? progress;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onDownload;
@@ -344,10 +369,13 @@ class _ResultTile extends StatelessWidget {
                   style: const TextStyle(color: Colors.white38, fontSize: 12)),
             ),
           if (downloading)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            SizedBox(
+              width: 34,
+              child: Text(
+                progress == null ? '…' : '${(progress! * 100).round()}%',
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+              ),
             )
           else if (cached)
             const Icon(Icons.offline_pin_outlined,
