@@ -53,6 +53,18 @@ class HomeFeed {
 ///   3. "Because you played X" = a fresh YouTube search seeded by your top
 ///      artists, filtered to tracks you have not heard yet.
 class Recommendations {
+  /// Auto-generated shelves should contain songs, not chart playlists and
+  /// hour-long compilations — those are what a bare "top songs" search returns.
+  static final _compilation = RegExp(
+    r'\b(top\s*\d+|top\s+(songs|hits|music)|hits?|billboard|chart|playlist|compilation|greatest|best\s+of|nonstop|full\s+album|megamix|playlist)\b',
+    caseSensitive: false,
+  );
+
+  static bool looksLikeCompilation(Track track) {
+    if (_compilation.hasMatch(track.title)) return true;
+    final seconds = track.duration ?? 0;
+    return seconds > 900; // 15 minutes or more is not a song
+  }
   Recommendations(this.library, this.source);
 
   final Library library;
@@ -112,7 +124,8 @@ class Recommendations {
 
     // A cold start should not be a blank screen.
     if (played.isEmpty && recent.isEmpty) {
-      final starter = await _safeSearch('top songs this week', limit: 12);
+      final starter = await _safeSearch('popular songs this week',
+          limit: 20, songsOnly: true);
       if (starter.isNotEmpty) {
         shelves.add(HomeShelf(
           title: 'Start here',
@@ -144,7 +157,7 @@ class Recommendations {
   }
 
   Future<List<Track>> _becauseYouPlayed(String artist, Set<String> known) async {
-    final results = await _safeSearch('$artist mix', limit: 15);
+    final results = await _safeSearch('$artist mix', limit: 15, songsOnly: true);
     return results
         .where((t) => !known.contains(t.id))
         .where((t) => t.artist.toLowerCase() != artist.toLowerCase())
@@ -152,13 +165,20 @@ class Recommendations {
         .toList(growable: false);
   }
 
-  Future<List<Track>> _safeSearch(String query, {int limit = 12}) async {
+  Future<List<Track>> _safeSearch(
+    String query, {
+    int limit = 12,
+    bool songsOnly = false,
+  }) async {
     try {
       final results = await source.search(query, limit: limit);
-      for (final track in results) {
+      final filtered = songsOnly
+          ? results.where((t) => !looksLikeCompilation(t)).toList(growable: false)
+          : results;
+      for (final track in filtered) {
         await library.remember(track);
       }
-      return results;
+      return filtered;
     } catch (_) {
       // A failed recommendation search must not break the home screen.
       return const [];

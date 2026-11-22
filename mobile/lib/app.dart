@@ -36,6 +36,9 @@ class AppServices {
 class AuroraApp extends StatelessWidget {
   const AuroraApp({super.key, required this.services});
 
+  /// Needed by the simulator QA harness to push the player without a tap.
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
   final AppServices services;
 
   @override
@@ -91,6 +94,7 @@ class AuroraApp extends StatelessWidget {
     );
 
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Aurora Music',
       debugShowCheckedModeBanner: false,
       theme: theme,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'app_events.dart';
+import 'debug_harness.dart';
 import 'audio/audio_handler.dart';
 import 'data/device_cache.dart';
 import 'data/artwork_cache.dart';
@@ -52,6 +53,21 @@ Future<void> main() async {
         memory: memory,
         artwork: artwork,
       ),
+    ),
+  );
+
+  // No-op unless the simulator QA define is set.
+  // ignore: unawaited_futures
+  runDemoHarness(
+    AppServices(
+      settings: settings,
+      library: library,
+      source: source,
+      cache: cache,
+      handler: handler,
+      events: events,
+      memory: memory,
+      artwork: artwork,
     ),
   );
 }

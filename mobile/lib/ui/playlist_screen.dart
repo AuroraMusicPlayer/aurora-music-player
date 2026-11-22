@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'artwork.dart';
 
 /// Tracks inside one playlist.
 class PlaylistScreen extends StatefulWidget {
@@ -121,10 +122,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 height: 50,
                                 child: track.thumbnail == null
                                     ? const ColoredBox(color: Color(0xFF1E1E1E))
-                                    : Image.network(track.thumbnail!,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => const ColoredBox(
-                                            color: Color(0xFF1E1E1E))),
+                                    : artworkForVideo(track.id),
                               ),
                             ),
                             title: Text(track.title,

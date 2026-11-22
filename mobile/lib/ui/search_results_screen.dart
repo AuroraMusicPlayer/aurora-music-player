@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'artwork.dart';
 
 /// A query turned into a playable list — used by mood/situation shortcuts.
 class SearchResultsScreen extends StatefulWidget {
@@ -115,10 +116,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                               borderRadius: BorderRadius.circular(6),
                               child: track.thumbnail == null
                                   ? const ColoredBox(color: Color(0xFF1E1E1E))
-                                  : Image.network(track.thumbnail!,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
-                                          const ColoredBox(color: Color(0xFF1E1E1E))),
+                                  : artworkForVideo(track.id),
                             ),
                           ),
                           title: Text(track.title,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../data/recommendations.dart';
+import 'artwork.dart';
 
 /// Square artwork tile used across the home feed.
 class ArtworkCard extends StatelessWidget {
@@ -88,11 +89,7 @@ class ArtworkCard extends StatelessWidget {
     if (track.thumbnail == null) {
       return const ColoredBox(color: Color(0xFF1E1E1E));
     }
-    return Image.network(
-      track.thumbnail!,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF1E1E1E)),
-    );
+    return artworkForVideo(track.id);
   }
 }
 

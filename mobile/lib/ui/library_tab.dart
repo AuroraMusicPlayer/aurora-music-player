@@ -5,6 +5,7 @@ import '../data/models.dart';
 import 'playlist_dialogs.dart';
 import 'playlist_screen.dart';
 import 'track_list_screen.dart';
+import 'artwork.dart';
 
 /// Playlists, liked songs and everything stored on the device.
 class LibraryTab extends StatefulWidget {
@@ -236,9 +237,7 @@ class _LibraryTabState extends State<LibraryTab> {
                       height: 44,
                       child: track.thumbnail == null
                           ? const ColoredBox(color: Color(0xFF1E1E1E))
-                          : Image.network(track.thumbnail!, fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const ColoredBox(color: Color(0xFF1E1E1E))),
+                          : artworkForVideo(track.id),
                     ),
                   ),
                   title: Text(track.title,

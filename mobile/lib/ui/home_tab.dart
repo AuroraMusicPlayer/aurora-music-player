@@ -10,9 +10,10 @@ import 'widgets.dart';
 
 /// The feed: built from what you actually listen to.
 class HomeTab extends StatefulWidget {
-  const HomeTab({super.key, required this.services});
+  const HomeTab({super.key, required this.services, this.onOpenSearch});
 
   final AppServices services;
+  final VoidCallback? onOpenSearch;
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -162,31 +163,58 @@ class _HomeTabState extends State<HomeTab> {
 
   Widget _buildFeed(HomeFeed feed) {
     if (feed.isEmpty) {
+      // A cold install should still be usable: the shortcuts that need no
+      // listening history come first, the explanation second.
       return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 128),
         children: [
-          SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.5,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.graphic_eq,
-                        size: 48, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(height: 16),
-                    const Text('Nothing here yet',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Play a few songs from Search. This screen then fills with '
-                      'your rotation and picks based on those artists.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
-                    ),
-                  ],
+          _MoodRow(onPick: _openMood),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Card(
+              elevation: 0,
+              color: const Color(0xFF1A1A1A),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const Icon(Icons.trending_up),
+                title: const Text('Top charts'),
+                subtitle: const Text('Public charts, played from YouTube',
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ChartsScreen(services: widget.services),
+                  ),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              children: [
+                Icon(Icons.graphic_eq,
+                    size: 44, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(height: 14),
+                const Text('Nothing here yet',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Search for a few songs you like. This screen then fills with '
+                  'your rotation, quick picks and mixes built from those artists.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: widget.onOpenSearch,
+                  icon: const Icon(Icons.search),
+                  label: const Text('Search music'),
+                ),
+              ],
             ),
           ),
         ],
@@ -210,7 +238,9 @@ class _HomeTabState extends State<HomeTab> {
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 24),
+      // Clear the navigation bar and the mini player so the last shelf is
+      // never cut off.
+      padding: const EdgeInsets.only(bottom: 128),
       children: [
         if (_continueTrack != null) _ContinueCard(
           track: _continueTrack!,

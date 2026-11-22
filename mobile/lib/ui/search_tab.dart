@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../data/models.dart';
 import 'playlist_dialogs.dart';
+import 'artwork.dart';
 
 class SearchTab extends StatefulWidget {
   const SearchTab({super.key, required this.services});
@@ -347,9 +348,7 @@ class _ResultTile extends StatelessWidget {
           height: 56,
           child: track.thumbnail == null
               ? const ColoredBox(color: Color(0xFF1E1E1E))
-              : Image.network(track.thumbnail!, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const ColoredBox(color: Color(0xFF1E1E1E))),
+              : artworkForVideo(track.id),
         ),
       ),
       title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),

@@ -1,10 +1,13 @@
 import 'dart:ui';
 
 import 'package:audio_service/audio_service.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'artwork.dart';
 import 'lyrics_sheet.dart';
 import 'playlist_dialogs.dart';
 import 'queue_sheet.dart';
@@ -32,13 +35,41 @@ Future<void> showPlayerSheet(BuildContext context, AppServices services) {
   );
 }
 
-class PlayerScreen extends StatelessWidget {
+class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key, required this.services});
 
   final AppServices services;
 
   @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.services.handler.error.addListener(_showError);
+  }
+
+  @override
+  void dispose() {
+    widget.services.handler.error.removeListener(_showError);
+    super.dispose();
+  }
+
+  /// Playback failures were only surfaced by the tab shell, so a failure while
+  /// the player was open looked like a frozen track.
+  void _showError() {
+    final message = widget.services.handler.error.value;
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 6)),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final services = widget.services;
     return Scaffold(
       backgroundColor: const Color(0xFF070707),
       body: ValueListenableBuilder<Track?>(
@@ -83,11 +114,7 @@ class _PlayerBody extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       child: AspectRatio(
                         aspectRatio: 1,
-                        child: track.thumbnail == null
-                            ? const ColoredBox(color: Color(0xFF1E1E1E))
-                            : Image.network(track.thumbnail!, fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const ColoredBox(color: Color(0xFF1E1E1E))),
+                        child: artworkForVideo(track.id),
                       ),
                     ),
                   ),
@@ -112,7 +139,7 @@ class _PlayerBody extends StatelessWidget {
                     style: const TextStyle(fontSize: 15, color: Colors.white60),
                   ),
                   const SizedBox(height: 22),
-                  _PositionBar(services: services),
+                  _PositionBar(services: services, track: track),
                   const SizedBox(height: 6),
                   _Controls(services: services),
                   const SizedBox(height: 10),
@@ -143,9 +170,8 @@ class _Backdrop extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (track.thumbnail != null)
-            Image.network(track.thumbnail!, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF101010))),
+          artworkForVideo(track.id,
+              placeholderColor: const Color(0xFF101010)),
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
             child: const ColoredBox(color: Color(0xCC000000)),
@@ -181,9 +207,10 @@ class _Grabber extends StatelessWidget {
 }
 
 class _PositionBar extends StatelessWidget {
-  const _PositionBar({required this.services});
+  const _PositionBar({required this.services, required this.track});
 
   final AppServices services;
+  final Track track;
 
   @override
   Widget build(BuildContext context) {
@@ -195,7 +222,9 @@ class _PositionBar extends StatelessWidget {
         return StreamBuilder<Duration?>(
           stream: services.handler.player.durationStream,
           builder: (context, durationSnapshot) {
-            final duration = durationSnapshot.data ?? Duration.zero;
+            // Until the stream reports its length, the catalogue metadata is a
+            // better answer than zero.
+            final duration = durationSnapshot.data ?? track.length ?? Duration.zero;
             final position = positionSnapshot.data ?? Duration.zero;
             final max = duration.inMilliseconds.toDouble();
             final value =

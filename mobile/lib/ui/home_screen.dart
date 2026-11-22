@@ -4,6 +4,7 @@ import '../app.dart';
 import 'home_tab.dart';
 import 'library_tab.dart';
 import 'mini_player.dart';
+import 'player_sheet.dart';
 import 'search_tab.dart';
 
 /// Shell: three tabs, a persistent mini player, and one place that surfaces
@@ -18,7 +19,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _tab = 0;
+  /// Defaults to Home; `--dart-define=AURORA_START_TAB=1|2` opens Search or
+  /// Library, which is how the screens get inspected in a simulator.
+  int _tab = int.tryParse(const String.fromEnvironment('AURORA_START_TAB')) ?? 0;
 
   @override
   void initState() {
@@ -42,12 +45,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // `--dart-define=AURORA_START_TAB=3` renders the player directly, which is
+    // how its layout is inspected in a simulator without tapping.
+    if (_tab == 3) {
+      return PlayerScreen(services: widget.services);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF030303),
       body: IndexedStack(
         index: _tab,
         children: [
-          HomeTab(services: widget.services),
+          HomeTab(
+            services: widget.services,
+            onOpenSearch: () => setState(() => _tab = 1),
+          ),
           SearchTab(services: widget.services),
           LibraryTab(services: widget.services),
         ],
