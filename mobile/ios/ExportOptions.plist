@@ -2,9 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Development: installs directly on your registered devices. -->
+    <!-- Ad Hoc: the only certificate on this Mac is an Apple Distribution one,
+         so the build is exported ad-hoc (installs on the registered devices,
+         no App Store involved). A Development certificate would be needed for
+         method=development. -->
     <key>method</key>
-    <string>development</string>
+    <string>ad-hoc</string>
     <key>teamID</key>
     <string>G6XG9572FX</string>
     <key>signingStyle</key>
