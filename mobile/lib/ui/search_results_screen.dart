@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../data/models.dart';
 import 'artwork.dart';
+import 'mini_player.dart';
 
 /// A query turned into a playable list — used by mood/situation shortcuts.
 class SearchResultsScreen extends StatefulWidget {
@@ -59,6 +60,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: MiniPlayer(services: widget.services),
       appBar: AppBar(
         title: Text(widget.title),
         actions: [

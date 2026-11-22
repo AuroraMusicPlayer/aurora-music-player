@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import 'mini_player.dart';
 
 /// Generic song list used by Liked songs, Offline songs and Downloads.
 class TrackListScreen extends StatefulWidget {
@@ -84,6 +85,7 @@ class _TrackListScreenState extends State<TrackListScreen> {
     final totalMb = _tracks.fold<int>(0, (sum, t) => sum + t.bytes) / (1024 * 1024);
 
     return Scaffold(
+      bottomNavigationBar: MiniPlayer(services: widget.services),
       appBar: AppBar(
         title: Text(widget.title),
         actions: [

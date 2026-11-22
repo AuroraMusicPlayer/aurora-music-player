@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import '../data/suggestions.dart';
 import 'playlist_dialogs.dart';
 import 'artwork.dart';
 
@@ -16,6 +19,9 @@ class SearchTab extends StatefulWidget {
 
 class _SearchTabState extends State<SearchTab> {
   final _controller = TextEditingController();
+  final _suggestions = SearchSuggestions();
+  Timer? _debounce;
+  List<String> _suggested = const [];
   List<Track> _results = const [];
   Set<String> _cachedIds = const {};
   bool _loading = false;
@@ -32,8 +38,35 @@ class _SearchTabState extends State<SearchTab> {
   @override
   void dispose() {
     widget.services.events.revision.removeListener(_refreshCached);
+    _debounce?.cancel();
+    _suggestions.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Suggestions are fetched 280 ms after typing stops, so a burst of
+  /// keystrokes produces one request instead of ten.
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 280), () async {
+      if (value.trim().length < 2) {
+        if (mounted) setState(() => _suggested = const []);
+        return;
+      }
+      final results = await _suggestions.forQuery(value);
+      if (!mounted) return;
+      // Ignore a slow response for a query the user has moved past.
+      if (_controller.text.trim() != value.trim()) return;
+      setState(() => _suggested = results);
+    });
+  }
+
+  Future<void> _submit(String query) async {
+    _debounce?.cancel();
+    _controller.text = query;
+    setState(() => _suggested = const []);
+    FocusScope.of(context).unfocus();
+    await _search(query);
   }
 
   Future<void> _refreshCached() async {
@@ -209,14 +242,18 @@ class _SearchTabState extends State<SearchTab> {
               leading: const Icon(Icons.search),
               elevation: const WidgetStatePropertyAll(0),
               backgroundColor: const WidgetStatePropertyAll(Color(0xFF1F1F1F)),
-              onSubmitted: _search,
+              onChanged: _onQueryChanged,
+              onSubmitted: _submit,
               trailing: [
                 if (_controller.text.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () {
                       _controller.clear();
-                      setState(() => _results = const []);
+                      setState(() {
+                        _results = const [];
+                        _suggested = const [];
+                      });
                     },
                   ),
               ],
@@ -229,6 +266,22 @@ class _SearchTabState extends State<SearchTab> {
   }
 
   Widget _buildBody() {
+    if (_suggested.isNotEmpty) {
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          for (final suggestion in _suggested)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.search, size: 18),
+              title: Text(suggestion, maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.north_west, size: 14),
+              onTap: () => _submit(suggestion),
+            ),
+        ],
+      );
+    }
+
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(

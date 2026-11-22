@@ -75,9 +75,11 @@ class AuroraApp extends StatelessWidget {
         backgroundColor: const Color(0xFF0A0A0A),
         indicatorColor: Colors.white10,
         surfaceTintColor: Colors.transparent,
+        height: 56,
+        iconTheme: const WidgetStatePropertyAll(IconThemeData(size: 20)),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w600
                 : FontWeight.w400,

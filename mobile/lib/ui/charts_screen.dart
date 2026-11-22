@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/deezer.dart';
+import 'mini_player.dart';
 
 /// Public Deezer charts. Tapping a row resolves it to a YouTube track on
 /// demand — one search per tap, not a bulk import, so it cannot trigger a
@@ -79,6 +80,7 @@ class _ChartsScreenState extends State<ChartsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: MiniPlayer(services: widget.services),
       appBar: AppBar(
         title: const Text('Top charts'),
         actions: [

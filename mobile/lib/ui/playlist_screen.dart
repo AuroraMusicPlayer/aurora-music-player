@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../data/models.dart';
 import 'artwork.dart';
+import 'mini_player.dart';
 
 /// Tracks inside one playlist.
 class PlaylistScreen extends StatefulWidget {
@@ -47,6 +48,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: MiniPlayer(services: widget.services),
       appBar: AppBar(
         title: Text(widget.playlist.name),
         actions: [

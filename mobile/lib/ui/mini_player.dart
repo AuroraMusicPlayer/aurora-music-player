@@ -13,6 +13,12 @@ class MiniPlayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Searching means the keyboard is up; the bar would sit on top of results
+    // and eat the little room that is left.
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) {
+      return const SizedBox.shrink();
+    }
+
     return StreamBuilder<MediaItem?>(
       stream: services.handler.mediaItem.stream,
       builder: (context, snapshot) {
@@ -46,7 +52,7 @@ class MiniPlayer extends StatelessWidget {
                       },
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                      padding: const EdgeInsets.fromLTRB(10, 5, 2, 5),
                       child: Row(
                         children: [
                           Hero(
@@ -54,8 +60,8 @@ class MiniPlayer extends StatelessWidget {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: SizedBox(
-                                width: 46,
-                                height: 46,
+                                width: 40,
+                                height: 40,
                                 child: item.artUri == null
                                     ? const ColoredBox(color: Color(0xFF2A2A2A))
                                     : Image.network(item.artUri.toString(),
@@ -74,27 +80,30 @@ class MiniPlayer extends StatelessWidget {
                                 Text(item.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontWeight: FontWeight.w500)),
+                                    style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
                                 Text(item.artist ?? '',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
-                                        color: Colors.white54, fontSize: 12)),
+                                        color: Colors.white54, fontSize: 11)),
                               ],
                             ),
                           ),
                           IconButton(
-                            icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                            icon: Icon(playing ? Icons.pause : Icons.play_arrow, size: 22),
+                            visualDensity: VisualDensity.compact,
                             onPressed: () =>
                                 playing ? services.handler.pause() : services.handler.play(),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.skip_next),
+                            icon: const Icon(Icons.skip_next, size: 22),
+                            visualDensity: VisualDensity.compact,
                             onPressed: services.handler.skipToNext,
                           ),
                           IconButton(
                             tooltip: 'Close player',
-                            icon: const Icon(Icons.close, size: 20),
+                            icon: const Icon(Icons.close, size: 18),
+                            visualDensity: VisualDensity.compact,
                             onPressed: services.handler.dismiss,
                           ),
                         ],
