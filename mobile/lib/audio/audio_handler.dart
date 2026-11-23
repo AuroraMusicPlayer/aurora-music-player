@@ -645,8 +645,16 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     String parentMediaId, [
     Map<String, dynamic>? options,
   ]) async {
-    if (parentMediaId == AudioService.browsableRootId ||
-        parentMediaId == browseRoot) {
+    // audio_service asks for its own root id, which differs by version. Treat
+    // anything that is not one of our leaf shelves as the root, so the car
+    // always gets a populated tree instead of an empty one.
+    final isLeaf = parentMediaId == browseLiked ||
+        parentMediaId == browseOffline ||
+        parentMediaId == browseRecent ||
+        parentMediaId == browseRotation ||
+        parentMediaId.startsWith(_playlistPrefix);
+
+    if (!isLeaf) {
       final playlists = await library.playlists();
       return [
         MediaItem(id: browseLiked, title: 'Liked songs', playable: false),
