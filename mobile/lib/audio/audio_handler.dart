@@ -685,46 +685,101 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /* ---------------------- Android Auto / car browsing -------------------- */
 
   static const browseRoot = 'aurora_root';
+  static const browseLibrary = 'library';
+  static const browsePlaylists = 'playlists';
   static const browseLiked = 'liked';
   static const browseOffline = 'offline';
   static const browseRecent = 'recent';
   static const browseRotation = 'rotation';
+  static const browseShuffle = 'shuffle_all';
   static const _playlistPrefix = 'playlist:';
 
-  /// The tree a head unit browses. Without this Android Auto shows the app but
-  /// nothing inside it.
+  /// Content-style hints. Without these the head unit guesses, and a shelf of
+  /// songs can render as big tiles instead of a list.
+  static const _listStyle = <String, dynamic>{
+    'android.media.browse.CONTENT_STYLE_BROWSABLE_HINT': 1, // LIST
+    'android.media.browse.CONTENT_STYLE_PLAYABLE_HINT': 1, // LIST
+  };
+
+  /// The tree a head unit browses: two folders plus the shortcuts people use
+  /// while driving.
   @override
   Future<List<MediaItem>> getChildren(
     String parentMediaId, [
     Map<String, dynamic>? options,
   ]) async {
-    // audio_service asks for its own root id, which differs by version. Treat
-    // anything that is not one of our leaf shelves as the root, so the car
-    // always gets a populated tree instead of an empty one.
-    final isLeaf = parentMediaId == browseLiked ||
-        parentMediaId == browseOffline ||
-        parentMediaId == browseRecent ||
-        parentMediaId == browseRotation ||
+    // audio_service's root id differs between versions; anything that is not a
+    // known node is treated as the root.
+    const nodes = {
+      browseLibrary,
+      browsePlaylists,
+      browseLiked,
+      browseOffline,
+      browseRecent,
+      browseRotation,
+      browseShuffle,
+    };
+    final isKnown = nodes.contains(parentMediaId) ||
         parentMediaId.startsWith(_playlistPrefix);
 
-    if (!isLeaf) {
+    if (!isKnown) {
+      return [
+        MediaItem(
+          id: browseLibrary,
+          title: 'Your library',
+          playable: false,
+          extras: _listStyle,
+        ),
+        MediaItem(
+          id: browsePlaylists,
+          title: 'Playlists',
+          playable: false,
+          extras: _listStyle,
+        ),
+        MediaItem(
+          id: browseRecent,
+          title: 'Recently played',
+          playable: false,
+          extras: _listStyle,
+        ),
+        MediaItem(
+          id: browseShuffle,
+          title: 'Shuffle everything',
+          playable: true,
+        ),
+      ];
+    }
+
+    if (parentMediaId == browseLibrary) {
+      return [
+        MediaItem(id: browseLiked, title: 'Liked songs', playable: false, extras: _listStyle),
+        MediaItem(id: browseOffline, title: 'Offline songs', playable: false, extras: _listStyle),
+        MediaItem(id: browseRecent, title: 'Recently played', playable: false, extras: _listStyle),
+        MediaItem(id: browseRotation, title: 'Heavy rotation', playable: false, extras: _listStyle),
+      ];
+    }
+
+    if (parentMediaId == browsePlaylists) {
       final playlists = await library.playlists();
       return [
-        MediaItem(id: browseLiked, title: 'Liked songs', playable: false),
-        MediaItem(id: browseOffline, title: 'Offline songs', playable: false),
-        MediaItem(id: browseRecent, title: 'Recently played', playable: false),
-        MediaItem(id: browseRotation, title: 'Heavy rotation', playable: false),
         for (final playlist in playlists)
           MediaItem(
             id: '$_playlistPrefix${playlist.id}',
             title: playlist.name,
             playable: false,
+            artUri: playlist.thumbnail == null
+                ? null
+                : Uri.tryParse(playlist.thumbnail!),
+            extras: _listStyle,
           ),
       ];
     }
 
     final tracks = await _tracksFor(parentMediaId);
-    return [for (final track in tracks) _mediaItem(track, parent: parentMediaId)];
+    return [
+      for (final track in tracks)
+        _mediaItem(track, parent: parentMediaId),
+    ];
   }
 
   @override
@@ -738,6 +793,20 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     String mediaId, [
     Map<String, dynamic>? extras,
   ]) async {
+    // "Shuffle everything" is an action, not a track.
+    if (mediaId == browseShuffle) {
+      final favourites = await library.favorites(limit: 100);
+      final pool = favourites.isNotEmpty
+          ? favourites
+          : await library.mostPlayed(limit: 100);
+      if (pool.isEmpty) return;
+      if (!_player.shuffleModeEnabled) {
+        await _player.setShuffleModeEnabled(true);
+      }
+      await playTracks(pool..shuffle());
+      return;
+    }
+
     final parent = extras?['parent'] as String? ?? browseRecent;
     final tracks = await _tracksFor(parent);
     if (tracks.isEmpty) return;

@@ -10,8 +10,9 @@ class Library {
 
   final Database _db;
 
-  static Future<Library> open() async {
-    final path = p.join(await getDatabasesPath(), 'aurora.db');
+  static Future<Library> open({String? directory}) async {
+    final base = directory ?? await getDatabasesPath();
+    final path = p.join(base, 'aurora.db');
     final db = await openDatabase(
       path,
       version: 4,

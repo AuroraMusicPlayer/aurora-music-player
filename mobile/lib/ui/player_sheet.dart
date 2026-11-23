@@ -11,6 +11,7 @@ import 'artwork.dart';
 import 'lyrics_sheet.dart';
 import 'playlist_dialogs.dart';
 import 'queue_sheet.dart';
+import 'video_screen.dart';
 
 /// Opens the full player. Slides up over the tabs, and the artwork grows out
 /// of the mini player.
@@ -415,6 +416,15 @@ class _Tools extends StatelessWidget {
           icon: Icons.lyrics_outlined,
           label: 'Lyrics',
           onTap: () => showLyricsSheet(context, services, track),
+        ),
+        _ToolButton(
+          icon: Icons.videocam_outlined,
+          label: 'Video',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => VideoScreen(services: services, track: track),
+            ),
+          ),
         ),
         _ToolButton(
           icon: Icons.radio,
