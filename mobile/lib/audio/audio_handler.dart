@@ -10,6 +10,7 @@ import '../data/artwork_cache.dart';
 import '../data/auto_cache_policy.dart';
 import '../data/device_cache.dart';
 import '../data/library.dart';
+import '../data/home_widget.dart';
 import '../data/live_activity.dart';
 import '../data/models.dart';
 import '../data/music_filter.dart';
@@ -205,12 +206,14 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   Future<void> play() async {
     await _player.play();
     unawaited(LiveActivity.sync(isPlaying: true, track: _active));
+    unawaited(_syncHomeWidget());
   }
 
   @override
   Future<void> pause() async {
     await _player.pause();
     unawaited(LiveActivity.sync(isPlaying: false, track: _active));
+    unawaited(_syncHomeWidget());
     final track = _active;
     if (track != null) {
       unawaited(memory?.save(track, _player.position) ?? Future<void>.value());
@@ -235,6 +238,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     mediaItem.add(null);
     queue.add([]);
     unawaited(LiveActivity.end());
+    unawaited(HomeWidget.clear());
     await super.stop();
   }
 
@@ -525,6 +529,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     mediaItem.add(_mediaItem(_active!));
     unawaited(_localizeArtwork(_active!));
     unawaited(LiveActivity.sync(isPlaying: _player.playing, track: _active));
+    unawaited(_syncHomeWidget());
     _refreshActive();
   }
 
@@ -566,6 +571,16 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     await _maybeAutoCache(track);
   }
 
+  Future<void> _syncHomeWidget() async {
+    final track = _active;
+    final path = track == null ? null : await artwork?.pathFor(track.id);
+    await HomeWidget.sync(
+      track: track,
+      isPlaying: _player.playing,
+      artworkPath: path,
+    );
+  }
+
   /// Re-publishes the media item with artwork cached on disk. The system asks
   /// for artwork lazily; a local file answers instantly where a remote URL
   /// often arrives too late.
@@ -575,6 +590,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     final uri = await cache.forTrack(track.id, track.thumbnail);
     if (uri == null || _active?.id != track.id) return;
     mediaItem.add(_mediaItem(track, artUri: uri));
+    unawaited(_syncHomeWidget());
   }
 
   Future<void> _refreshActive() async {

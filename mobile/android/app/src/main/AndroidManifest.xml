@@ -52,6 +52,19 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".AuroraWidgetProvider"
+            android:exported="false"
+            android:label="Aurora Music">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="dev.aurora.auroraMusic.WIDGET_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/aurora_widget_info" />
+        </receiver>
+
         <!-- Declares this as a media app so Android Auto lists it. -->
         <meta-data
             android:name="com.google.android.gms.car.application"

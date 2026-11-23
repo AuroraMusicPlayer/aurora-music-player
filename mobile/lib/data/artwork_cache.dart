@@ -70,6 +70,16 @@ class ArtworkCache {
     }
   }
 
+  /// The local file for a track, if artwork has already been downloaded.
+  Future<String?> pathFor(String id) async {
+    try {
+      final dir = await _dir();
+      final file = File(p.join(dir.path, '$id.jpg'));
+      if (await file.exists() && await file.length() > 1024) return file.path;
+    } catch (_) {}
+    return null;
+  }
+
   /// Drops artwork files that no longer belong to a cached track.
   Future<void> clear() async {
     try {
