@@ -483,15 +483,28 @@ class _Tools extends StatelessWidget {
               ListTile(
                 title: Text('$minutes minutes'),
                 onTap: () {
+                  handler.sleepAtTrackEnd.value = false;
                   handler.setSleepTimer(Duration(minutes: minutes));
                   Navigator.pop(sheetContext);
                 },
               ),
             ListTile(
+              leading: const Icon(Icons.music_note_outlined),
+              title: const Text('End of this song'),
+              subtitle: const Text('Stops when the current track finishes',
+                  style: TextStyle(fontSize: 11, color: Colors.white54)),
+              onTap: () {
+                handler.setSleepTimer(null);
+                handler.sleepAtTrackEnd.value = true;
+                Navigator.pop(sheetContext);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.timer_off_outlined),
               title: const Text('Off'),
               onTap: () {
                 handler.setSleepTimer(null);
+                handler.sleepAtTrackEnd.value = false;
                 Navigator.pop(sheetContext);
               },
             ),

@@ -69,6 +69,8 @@ Future<void> main() async {
         )
       : buildHandler();
 
+  await handler.restoreQueue(library);
+
   runApp(
     AuroraApp(
       services: AppServices(

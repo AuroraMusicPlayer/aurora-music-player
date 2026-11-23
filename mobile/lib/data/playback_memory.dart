@@ -17,6 +17,8 @@ class PlaybackMemory {
   static const _kTrackId = 'last_track_id';
   static const _kPosition = 'last_position_ms';
   static const _kSearches = 'recent_searches';
+  static const _kQueueIds = 'queue_ids';
+  static const _kQueueIndex = 'queue_index';
   static const _maxSearches = 8;
 
   String? get lastTrackId => _prefs.getString(_kTrackId);
@@ -35,6 +37,23 @@ class PlaybackMemory {
   Future<void> clear() async {
     await _prefs.remove(_kTrackId);
     await _prefs.remove(_kPosition);
+  }
+
+  /// The queue survives restarts, so reopening the app does not throw away the
+  /// playlist you were in the middle of.
+  Future<void> saveQueue(List<String> ids, int index) async {
+    await _prefs.setStringList(_kQueueIds, ids.take(200).toList(growable: false));
+    await _prefs.setInt(_kQueueIndex, index);
+  }
+
+  List<String> get queueIds =>
+      (_prefs.getStringList(_kQueueIds) ?? const []).toList(growable: false);
+
+  int get queueIndex => _prefs.getInt(_kQueueIndex) ?? 0;
+
+  Future<void> clearQueue() async {
+    await _prefs.remove(_kQueueIds);
+    await _prefs.remove(_kQueueIndex);
   }
 
   List<String> get recentSearches =>

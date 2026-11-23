@@ -56,6 +56,48 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   final ArtworkCache? artwork;
 
   DateTime _lastSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastQueueSavedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Set when the queue was restored from storage but no audio source is
+  /// loaded yet; the first play resumes it.
+  bool _needsLoad = false;
+  int _restoreIndex = 0;
+
+  /// Rebuilds the queue from the previous session without starting playback.
+  Future<void> restoreQueue(Library library) async {
+    final memory = this.memory;
+    if (memory == null) return;
+    final ids = memory.queueIds;
+    if (ids.length < 2) return;
+
+    final tracks = <Track>[];
+    for (final id in ids) {
+      final track = await library.byId(id);
+      if (track != null) tracks.add(track);
+    }
+    if (tracks.isEmpty) return;
+
+    _queue = tracks;
+    _restoreIndex = memory.queueIndex.clamp(0, tracks.length - 1);
+    _active = tracks[_restoreIndex];
+    _needsLoad = true;
+    activeTrack.value = _active;
+    mediaItem.add(_mediaItem(_active!));
+    queue.add([for (final track in tracks) _mediaItem(track)]);
+    unawaited(_localizeArtwork(_active!));
+    unawaited(LiveActivity.sync(isPlaying: false, track: _active));
+    unawaited(_syncHomeWidget());
+  }
+
+  void _persistQueue() {
+    final memory = this.memory;
+    if (memory == null || _queue.isEmpty) return;
+    final now = DateTime.now();
+    if (now.difference(_lastQueueSavedAt) < const Duration(seconds: 5)) return;
+    _lastQueueSavedAt = now;
+    final index = _player.currentIndex ?? _restoreIndex;
+    unawaited(memory.saveQueue(_queue.map((t) => t.id).toList(), index));
+  }
 
   AutoCachePolicy get policy => AutoCachePolicy(
         enabled: settings.autoCacheEnabled,
@@ -70,6 +112,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   /// When the sleep timer will pause playback, or null when it is off.
   final ValueNotifier<DateTime?> sleepEndsAt = ValueNotifier<DateTime?>(null);
+  final ValueNotifier<bool> sleepAtTrackEnd = ValueNotifier<bool>(false);
   final ValueNotifier<double> speed = ValueNotifier<double>(1.0);
   final ValueNotifier<bool> autoplayEnabled = ValueNotifier<bool>(true);
 
@@ -204,6 +247,11 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   @override
   Future<void> play() async {
+    if (_needsLoad && _queue.isNotEmpty) {
+      _needsLoad = false;
+      await playTracks(_queue, startIndex: _restoreIndex);
+      return;
+    }
     await _player.play();
     unawaited(LiveActivity.sync(isPlaying: true, track: _active));
     unawaited(_syncHomeWidget());
@@ -239,6 +287,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     queue.add([]);
     unawaited(LiveActivity.end());
     unawaited(HomeWidget.clear());
+    unawaited(memory?.clearQueue() ?? Future<void>.value());
     await super.stop();
   }
 
@@ -530,6 +579,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     unawaited(_localizeArtwork(_active!));
     unawaited(LiveActivity.sync(isPlaying: _player.playing, track: _active));
     unawaited(_syncHomeWidget());
+    _persistQueue();
     _refreshActive();
   }
 
@@ -554,6 +604,14 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
       if (fraction >= 0.8) {
         _longListenHandled = true;
         _maybeAutoCache(track, longListen: true);
+      }
+    }
+
+    // "Stop after this song" is checked here so it fires at the natural end.
+    if (sleepAtTrackEnd.value && track.duration != null && track.duration! > 0) {
+      if (position.inSeconds >= track.duration! - 2) {
+        sleepAtTrackEnd.value = false;
+        unawaited(pause());
       }
     }
 
