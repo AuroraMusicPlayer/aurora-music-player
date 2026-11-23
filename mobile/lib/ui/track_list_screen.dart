@@ -73,6 +73,24 @@ class _TrackListScreenState extends State<TrackListScreen> {
     return list;
   }
 
+  Future<void> _downloadAll() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final missing = _tracks.where((t) => !t.isCached).length;
+    if (missing == 0) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Everything here is already saved')));
+      return;
+    }
+
+    messenger.showSnackBar(SnackBar(
+      content: Text('Saving $missing songs, one at a time…'),
+      duration: const Duration(seconds: 4),
+    ));
+    final saved = await widget.services.cache.downloadAll(_tracks);
+    await _reload();
+    messenger.showSnackBar(SnackBar(content: Text('Saved $saved of $missing')));
+  }
+
   Future<void> _longPress(Track track) async {
     final action = widget.onLongPress;
     if (action == null) return;
@@ -89,6 +107,11 @@ class _TrackListScreenState extends State<TrackListScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          IconButton(
+            tooltip: 'Download all',
+            icon: const Icon(Icons.download_for_offline_outlined),
+            onPressed: _downloadAll,
+          ),
           PopupMenuButton<TrackSort>(
             tooltip: 'Sort',
             icon: const Icon(Icons.sort),

@@ -181,6 +181,65 @@ class _LibraryTabState extends State<LibraryTab> {
               )),
             ),
 
+            _sectionHeader(context, 'Smart lists'),
+            ListTile(
+              leading: _icon(Icons.fiber_new, Colors.lightBlueAccent),
+              title: const Text('Recently added'),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Recently added',
+                emptyMessage: 'Tracks appear here as you search and play.',
+                load: () => services.library.recentlyAdded(),
+              )),
+            ),
+            ListTile(
+              leading: _icon(Icons.local_fire_department, Colors.orangeAccent),
+              title: const Text('Most played'),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Most played',
+                showHeart: true,
+                emptyMessage: 'Play something a few times and this fills up.',
+                load: () => services.library.mostPlayed(limit: 100),
+              )),
+            ),
+            ListTile(
+              leading: _icon(Icons.history_toggle_off, Colors.white70),
+              title: const Text('Forgotten'),
+              subtitle: const Text('Played before, not heard in a week',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Forgotten',
+                showHeart: true,
+                emptyMessage: 'Nothing forgotten yet — keep listening.',
+                load: () => services.library.worthAnotherListen(limit: 100),
+              )),
+            ),
+            ListTile(
+              leading: _icon(Icons.download_done, Colors.greenAccent),
+              title: const Text('Downloaded this month'),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Downloaded this month',
+                showHeart: true,
+                emptyMessage: 'Nothing downloaded in the last 30 days.',
+                load: () => services.library.downloadedThisMonth(),
+              )),
+            ),
+            ListTile(
+              leading: _icon(Icons.flight_takeoff, Colors.purpleAccent),
+              title: const Text('Ready for offline'),
+              subtitle: const Text('Played, not saved yet',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              onTap: () => _open(TrackListScreen(
+                services: services,
+                title: 'Ready for offline',
+                emptyMessage: 'Nothing waiting to be saved.',
+                load: () => services.library.readyForOffline(),
+              )),
+            ),
+
             _sectionHeader(context, 'Playlists', trailing: '${_playlists.length}'),
             if (_playlists.isEmpty)
               const Padding(

@@ -6,6 +6,7 @@ import '../app.dart';
 import '../data/models.dart';
 import '../data/recommendations.dart';
 import '../data/youtube_library.dart';
+import 'artist_screen.dart';
 import 'charts_screen.dart';
 import 'search_results_screen.dart';
 import 'settings_screen.dart';
@@ -343,7 +344,15 @@ class _HomeTabState extends State<HomeTab> {
                 final artist = feed.artists[index];
                 return ArtistCircle(
                   artist: artist,
-                  onTap: () => _openQuery(artist.name, artist.name),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ArtistScreen(
+                        services: widget.services,
+                        artist: artist.name,
+                        thumbnail: artist.thumbnail,
+                      ),
+                    ),
+                  ),
                 );
               },
             ),

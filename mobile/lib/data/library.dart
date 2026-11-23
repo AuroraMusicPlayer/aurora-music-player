@@ -14,15 +14,21 @@ class Library {
     final path = p.join(await getDatabasesPath(), 'aurora.db');
     final db = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await _createTracks(db);
         await _createPlaylists(db);
         await _createSync(db);
+        await db.execute('ALTER TABLE tracks ADD COLUMN added_at INTEGER');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createPlaylists(db);
         if (oldVersion < 3) await _createSync(db);
+        if (oldVersion < 4) {
+          await db.execute('ALTER TABLE tracks ADD COLUMN added_at INTEGER');
+          await db.execute(
+              'UPDATE tracks SET added_at = COALESCE(last_played, 0)');
+        }
       },
     );
     return Library(db);
@@ -91,8 +97,8 @@ class Library {
   /// Insert metadata from the resolver without clobbering playback stats.
   Future<void> remember(Track track) async {
     await _db.rawInsert('''
-      INSERT INTO tracks(id, title, artist, album, duration, thumbnail)
-      VALUES(?, ?, ?, ?, ?, ?)
+      INSERT INTO tracks(id, title, artist, album, duration, thumbnail, added_at)
+      VALUES(?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         artist = excluded.artist,
@@ -106,6 +112,7 @@ class Library {
       track.album,
       track.duration,
       track.thumbnail,
+      DateTime.now().millisecondsSinceEpoch,
     ]);
   }
 
@@ -213,6 +220,56 @@ class Library {
         orderBy: 'last_played DESC',
         limit: limit);
     return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  /* ---------------------------- smart lists ----------------------------- */
+
+  Future<List<Track>> recentlyAdded({int limit = 100}) async {
+    final rows = await _db.query('tracks',
+        orderBy: 'added_at DESC, rowid DESC', limit: limit);
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  Future<List<Track>> downloadedThisMonth({int limit = 100}) async {
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .millisecondsSinceEpoch;
+    final rows = await _db.query(
+      'tracks',
+      where: 'audio_path IS NOT NULL AND cached_at >= ?',
+      whereArgs: [cutoff],
+      orderBy: 'cached_at DESC',
+      limit: limit,
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  /// Played, never saved: the queue for a long drive or a flight.
+  Future<List<Track>> readyForOffline({int limit = 100}) async {
+    final rows = await _db.query(
+      'tracks',
+      where: 'play_count > 0 AND audio_path IS NULL',
+      orderBy: 'play_count DESC',
+      limit: limit,
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  Future<List<Track>> byArtist(String artist, {int limit = 100}) async {
+    final rows = await _db.query(
+      'tracks',
+      where: 'LOWER(artist) = LOWER(?)',
+      whereArgs: [artist],
+      orderBy: 'play_count DESC, title ASC',
+      limit: limit,
+    );
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
+  Future<int> tracksByArtist(String artist) async {
+    final rows = await _db.rawQuery(
+        'SELECT COUNT(*) AS n FROM tracks WHERE LOWER(artist) = LOWER(?)', [artist]);
+    return (rows.first['n'] as num?)?.toInt() ?? 0;
   }
 
   /// Most played first, for the home feed.
