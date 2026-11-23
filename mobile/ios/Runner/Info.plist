@@ -32,6 +32,14 @@
 				<string>com.googleusercontent.apps.790541594186-jvnv26ush3r8tdd70lk5er14lgb9cv4n</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>aurora</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
@@ -46,6 +54,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Aurora Music connects to your own resolver on the local network to fetch and cache audio.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -10,6 +10,7 @@ import '../data/artwork_cache.dart';
 import '../data/auto_cache_policy.dart';
 import '../data/device_cache.dart';
 import '../data/library.dart';
+import '../data/live_activity.dart';
 import '../data/models.dart';
 import '../data/playback_memory.dart';
 import '../data/youtube_source.dart';
@@ -200,11 +201,15 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /* ----------------------------- transport ------------------------------ */
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    await _player.play();
+    unawaited(LiveActivity.sync(isPlaying: true, track: _active));
+  }
 
   @override
   Future<void> pause() async {
     await _player.pause();
+    unawaited(LiveActivity.sync(isPlaying: false, track: _active));
     final track = _active;
     if (track != null) {
       unawaited(memory?.save(track, _player.position) ?? Future<void>.value());
@@ -228,6 +233,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     activeTrack.value = null;
     mediaItem.add(null);
     queue.add([]);
+    unawaited(LiveActivity.end());
     await super.stop();
   }
 
@@ -481,6 +487,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     activeTrack.value = _active;
     mediaItem.add(_mediaItem(_active!));
     unawaited(_localizeArtwork(_active!));
+    unawaited(LiveActivity.sync(isPlaying: _player.playing, track: _active));
     _refreshActive();
   }
 

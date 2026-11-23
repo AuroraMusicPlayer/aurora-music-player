@@ -12,5 +12,20 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    guard let registrar = engineBridge.pluginRegistry
+      .registrar(forPlugin: "AuroraLiveActivityBridge") else { return }
+
+    let channel = FlutterMethodChannel(
+      name: "aurora/live_activity",
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      if #available(iOS 16.2, *) {
+        AuroraLiveActivityManager.shared.handle(call, result: result)
+      } else {
+        result(FlutterError(code: "unsupported", message: "iOS 16.2+ required", details: nil))
+      }
+    }
   }
 }
