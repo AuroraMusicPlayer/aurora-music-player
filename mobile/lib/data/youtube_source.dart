@@ -68,7 +68,27 @@ class YouTubeSource {
   Duration get cooldownRemaining =>
       isCoolingDown ? _cooldownUntil.difference(DateTime.now()) : Duration.zero;
 
+  /// Searches YouTube, and if a multi-word query finds nothing, retries with
+  /// its first word.
+  ///
+  /// Concrete case: "noizy pwa" returns zero videos, while "noizy" returns the
+  /// artist's catalogue. A dead end is worse than a slightly looser query,
+  /// especially since the ranker then orders the results by what you play.
   Future<List<Track>> search(String query, {int limit = 25, bool refresh = false}) async {
+    final tracks = await _searchOnce(query, limit: limit, refresh: refresh);
+    if (tracks.isNotEmpty) return tracks;
+
+    final firstWord = query.trim().split(RegExp(r'\s+')).first;
+    if (firstWord.length < 3 || firstWord == query.trim()) return tracks;
+
+    return _searchOnce(firstWord, limit: limit, refresh: refresh);
+  }
+
+  Future<List<Track>> _searchOnce(
+    String query, {
+    required int limit,
+    required bool refresh,
+  }) async {
     final key = '${query.trim().toLowerCase()}|$limit';
     final cached = _searches[key];
     if (!refresh &&
