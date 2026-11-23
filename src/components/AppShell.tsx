@@ -4,6 +4,7 @@ import { BottomNav } from "./BottomNav";
 import { MiniPlayer } from "./MiniPlayer";
 import { FullPlayer } from "./FullPlayer";
 import { Toaster } from "@/components/ui/sonner";
+import { PwaBridge } from "./PwaBridge";
 import { usePlayer } from "@/store/player";
 import { useSettings } from "@/store/settings";
 
@@ -31,6 +32,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Full-screen player overlay */}
       <AnimatePresence>{playerOpen && currentId && <FullPlayer key="full" />}</AnimatePresence>
+
+      <PwaBridge />
 
       <Toaster position="top-center" />
     </div>
