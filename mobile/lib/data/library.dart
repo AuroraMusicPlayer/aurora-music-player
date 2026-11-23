@@ -242,6 +242,25 @@ class Library {
     return rows.map(Track.fromRow).toList(growable: false);
   }
 
+  /// artist → (plays − skips), used to rank search results by taste.
+  Future<Map<String, int>> artistScores() async {
+    final rows = await _db.rawQuery('''
+      SELECT LOWER(artist) AS artist,
+             SUM(play_count) - SUM(skip_count) AS score
+      FROM tracks
+      WHERE play_count > 0
+      GROUP BY LOWER(artist)
+      HAVING score > 0
+      ORDER BY score DESC
+      LIMIT 200
+    ''');
+    return {
+      for (final row in rows)
+        if (row['artist'] is String)
+          (row['artist'] as String): (row['score'] as num?)?.toInt() ?? 0,
+    };
+  }
+
   /// Artists with their most recent artwork, for the circular home row.
   Future<List<ArtistRef>> artistRefs({int limit = 12}) async {
     final rows = await _db.rawQuery('''

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import '../data/search_ranker.dart';
 import '../data/suggestions.dart';
 import 'playlist_dialogs.dart';
 import 'artwork.dart';
@@ -85,7 +86,13 @@ class _SearchTabState extends State<SearchTab> {
     });
 
     try {
-      final results = await widget.services.source.search(q);
+      final raw = await widget.services.source.search(q);
+
+      // Re-order by what this library knows: a known artist in the query
+      // outranks a same-titled song from somebody unrelated.
+      final scores = await widget.services.library.artistScores();
+      final results = SearchRanker(scores).rank(q, raw);
+
       for (final track in results) {
         await widget.services.library.remember(track);
       }
