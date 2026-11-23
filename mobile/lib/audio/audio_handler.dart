@@ -12,6 +12,7 @@ import '../data/device_cache.dart';
 import '../data/library.dart';
 import '../data/live_activity.dart';
 import '../data/models.dart';
+import '../data/music_filter.dart';
 import '../data/playback_memory.dart';
 import '../data/youtube_source.dart';
 import '../settings.dart';
@@ -138,8 +139,8 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (last == null) return;
 
     try {
-      final more = await source.search('${last.artist} mix', limit: 10);
-      final fresh = more
+      final more = await source.search('${last.artist} mix', limit: 12);
+      final fresh = MusicFilter.songsOnly(more)
           .where((t) => !_queue.any((q) => q.id == t.id))
           .take(5)
           .toList(growable: false);
@@ -310,13 +311,49 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     );
   }
 
+  /// Plays the tapped song, then an algorithmically related queue rather than
+  /// the rest of the search list in YouTube's order.
+  ///
+  /// The related part is shuffled up front instead of enabling just_audio's
+  /// shuffle, which would also reorder the seed and could start elsewhere.
+  Future<void> startQueueFromTrack(Track seed, {List<Track> fallback = const []}) async {
+    final results = await source.search('${seed.artist} ${seed.title} mix', limit: 20);
+    final related = MusicFilter.songsOnly(results)
+        .where((t) => t.id != seed.id)
+        .toList(growable: true)
+      ..shuffle();
+
+    final queue = <Track>[seed, ...related.take(20)];
+    if (queue.length < 4) {
+      // Not enough related material: fall back to the search results, still
+      // filtered, so the queue is never two songs long.
+      queue.addAll(
+        MusicFilter.songsOnly(fallback).where((t) => t.id != seed.id).take(15),
+      );
+    }
+    await playTracks(queue);
+  }
+
+  /// Spoken queries from the car ("play Noizy") arrive here.
+  @override
+  Future<void> playFromSearch(String query, [Map<String, dynamic>? extras]) async {
+    final results = await source.search(query, limit: 10);
+    if (results.isEmpty) return;
+    await startQueueFromTrack(results.first, fallback: results);
+  }
+
   /// Endless-ish radio seeded by a track: the seed first, then a search mix
   /// built around its artist. Autoplay keeps it going afterwards.
   Future<void> startRadio(Track seed, {int size = 15}) async {
     final results = await source.search('${seed.artist} radio', limit: size);
+    final related = MusicFilter.songsOnly(
+      results.where((t) => t.id != seed.id).toList(growable: false),
+    ).toList()
+      ..shuffle();
+
     final tracks = <Track>[
       seed,
-      ...results.where((t) => t.id != seed.id),
+      ...related,
     ];
     if (tracks.length == 1) {
       // Nothing similar found; at least play the seed.

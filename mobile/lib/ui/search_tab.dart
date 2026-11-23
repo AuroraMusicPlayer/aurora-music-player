@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../data/models.dart';
+import '../data/music_filter.dart';
 import '../data/search_ranker.dart';
 import '../data/suggestions.dart';
 import 'playlist_dialogs.dart';
@@ -91,7 +92,10 @@ class _SearchTabState extends State<SearchTab> {
       // Re-order by what this library knows: a known artist in the query
       // outranks a same-titled song from somebody unrelated.
       final scores = await widget.services.library.artistScores();
-      final results = SearchRanker(scores).rank(q, raw);
+      final ranked = SearchRanker(scores).rank(q, raw);
+      // Ranked first, then shows removed — so a podcast cannot occupy a slot
+      // that a song would have taken.
+      final results = MusicFilter.songsOnly(ranked);
 
       for (final track in results) {
         await widget.services.library.remember(track);
