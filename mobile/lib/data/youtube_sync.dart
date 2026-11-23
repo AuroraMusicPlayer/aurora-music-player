@@ -52,7 +52,10 @@ class YouTubeSync {
   static const _maxPlaylistPush = 2;
   static const _maxItemsPerPlaylist = 30;
 
-  Future<SyncResult> run({void Function(String)? onStatus}) async {
+  Future<SyncResult> run({
+    void Function(String)? onStatus,
+    bool pullOnly = false,
+  }) async {
     final result = SyncResult();
 
     onStatus?.call('Reading liked songs from YouTube…');
@@ -68,6 +71,10 @@ class YouTubeSync {
       await library.remember(track);
       await library.setFavorite(track.id, true);
       result.likesPulled++;
+    }
+
+    if (pullOnly) {
+      return result;
     }
 
     // Push: local likes YouTube has never seen.
@@ -192,6 +199,9 @@ class YouTubeSync {
 
     final response = await request.close();
     final text = await utf8.decoder.bind(response).join();
+    if (response.statusCode == 401) {
+      throw const GoogleAuthExpired();
+    }
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw YouTubeSourceFailure(
         'YouTube ${response.statusCode}: '

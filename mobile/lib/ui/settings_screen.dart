@@ -83,6 +83,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: const Text('Sign out'),
         ),
       ),
+      SwitchListTile(
+        title: const Text('Pull only'),
+        subtitle: const Text(
+          'Read from YouTube without ever changing it. Saves quota and protects '
+          'the account if you share the app.',
+          style: TextStyle(fontSize: 12),
+        ),
+        value: services.settings.youtubePullOnly,
+        onChanged: (value) => setState(() => services.settings.youtubePullOnly = value),
+      ),
       ListTile(
         leading: const Icon(Icons.sync),
         title: const Text('Sync with YouTube Music'),

@@ -13,6 +13,7 @@ class Settings extends ChangeNotifier {
   static const _kThreshold = 'auto_cache_threshold';
   static const _kWifiOnly = 'auto_cache_wifi_only';
   static const _kBudgetGb = 'cache_budget_gb';
+  static const _kPullOnly = 'youtube_pull_only';
 
   bool get autoCacheEnabled => _prefs.getBool(_kAutoCache) ?? true;
 
@@ -44,4 +45,13 @@ class Settings extends ChangeNotifier {
   }
 
   int get cacheBudgetBytes => cacheBudgetGb * 1024 * 1024 * 1024;
+
+  /// When on, sync only reads from YouTube: nothing is ever written back.
+  /// Protects the account and the quota when the app is shared.
+  bool get youtubePullOnly => _prefs.getBool(_kPullOnly) ?? false;
+
+  set youtubePullOnly(bool value) {
+    _prefs.setBool(_kPullOnly, value);
+    notifyListeners();
+  }
 }

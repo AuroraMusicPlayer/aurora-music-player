@@ -46,6 +46,9 @@ class YouTubeLibrary {
 
     final response = await request.close();
     final body = await utf8.decoder.bind(response).join();
+    if (response.statusCode == 401) {
+      throw const GoogleAuthExpired();
+    }
     if (response.statusCode != 200) {
       throw YouTubeSourceException(
         'YouTube returned ${response.statusCode}'

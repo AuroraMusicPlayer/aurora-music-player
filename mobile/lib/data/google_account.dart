@@ -25,6 +25,17 @@ const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 const googleAndroidClientId =
     String.fromEnvironment('GOOGLE_ANDROID_CLIENT_ID');
 
+/// Raised when Google rejects the stored token. Apps in Testing mode get a new
+/// consent every seven days, so this is routine rather than exceptional.
+class GoogleAuthExpired implements Exception {
+  const GoogleAuthExpired();
+
+  @override
+  String toString() =>
+      'Your Google session expired. Reconnect to keep syncing — Testing-mode '
+      'apps need re-authorisation every seven days.';
+}
+
 class GoogleUser {
   const GoogleUser({this.email, this.displayName, this.photoUrl});
 
@@ -149,9 +160,7 @@ class GoogleAccount {
       promptIfNecessary: true,
     );
     if (headers == null) {
-      throw const GoogleAccountException(
-        'Access to your YouTube library was not granted',
-      );
+      throw const GoogleAuthExpired();
     }
     return headers;
   }
