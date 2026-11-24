@@ -64,6 +64,10 @@ jobs:
           channel: stable
           cache: true
 
+      # Keeps the Gradle dependency cache between runs. Maven Central rate
+      # limits unauthenticated fetches (HTTP 429), which failed one build.
+      - uses: gradle/actions/setup-gradle@v4
+
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
