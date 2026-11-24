@@ -181,6 +181,8 @@ jobs:
       - run: npm run build
 
       - name: Package static build
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           mkdir -p out
           cp -R .output/public/. out/
