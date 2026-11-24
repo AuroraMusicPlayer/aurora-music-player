@@ -10,7 +10,7 @@ android {
     // Pinned to the NDK already installed on this machine rather than Flutter's
     // default, to avoid a 1.5 GB download on a full disk. Nothing in the app
     // ships native C/C++, it is only used by build tooling.
-    ndkVersion = "27.1.12297006"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -183,9 +183,12 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (last == null) return;
 
     try {
-      final more = await source.search('${last.artist} mix', limit: 12);
-      final fresh = MusicFilter.songsOnly(more)
+      final more = await source.search('${last.artist} mix', limit: 15);
+      final seenTitles = _queue.map((t) => MusicFilter.titleKey(t.title)).toSet();
+      final fresh = more
+          .where(MusicFilter.isSongLike)
           .where((t) => !_queue.any((q) => q.id == t.id))
+          .where((t) => seenTitles.add(MusicFilter.titleKey(t.title)))
           .take(5)
           .toList(growable: false);
       if (fresh.isEmpty) return;
@@ -370,39 +373,44 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   /// The related part is shuffled up front instead of enabling just_audio's
   /// shuffle, which would also reorder the seed and could start elsewhere.
   Future<void> startQueueFromTrack(Track seed, {List<Track> fallback = const []}) async {
-    final results = await source.search('${seed.artist} ${seed.title} mix', limit: 20);
-    final related = MusicFilter.songsOnly(results)
-        .where((t) => t.id != seed.id)
-        .toList(growable: true)
-      ..shuffle();
+    // Searching "artist title" returns the same recording a dozen times with
+    // different suffixes. Search the artist instead, then exclude the seed's
+    // title outright so the queue never replays the song you just chose.
+    final results = await source.search(seed.artist, limit: 25);
+    final seedKey = MusicFilter.titleKey(seed.title);
+    final seen = <String>{seedKey};
+    final related = <Track>[];
 
-    final queue = <Track>[seed, ...related.take(20)];
-    if (queue.length < 4) {
-      // Not enough related material: fall back to the search results, still
-      // filtered, so the queue is never two songs long.
-      queue.addAll(
-        MusicFilter.songsOnly(fallback).where((t) => t.id != seed.id).take(15),
-      );
+    void consider(Iterable<Track> tracks) {
+      for (final track in tracks) {
+        if (!MusicFilter.isSongLike(track)) continue;
+        if (!seen.add(MusicFilter.titleKey(track.title))) continue;
+        related.add(track);
+      }
     }
-    await playTracks(queue);
-  }
 
-  /// Spoken queries from the car ("play Noizy") arrive here.
-  @override
-  Future<void> playFromSearch(String query, [Map<String, dynamic>? extras]) async {
-    final results = await source.search(query, limit: 10);
-    if (results.isEmpty) return;
-    await startQueueFromTrack(results.first, fallback: results);
+    consider(results);
+    if (related.length < 4) consider(fallback);
+
+    related.shuffle();
+    final queue = <Track>[seed, ...related.take(20)];
+    await playTracks(queue);
   }
 
   /// Endless-ish radio seeded by a track: the seed first, then a search mix
   /// built around its artist. Autoplay keeps it going afterwards.
   Future<void> startRadio(Track seed, {int size = 15}) async {
-    final results = await source.search('${seed.artist} radio', limit: size);
-    final related = MusicFilter.songsOnly(
-      results.where((t) => t.id != seed.id).toList(growable: false),
-    ).toList()
-      ..shuffle();
+    final results = await source.search('${seed.artist} radio', limit: size + 5);
+    final seedKey = MusicFilter.titleKey(seed.title);
+    final seen = <String>{seedKey};
+    final related = <Track>[];
+    for (final track in results) {
+      if (track.id == seed.id) continue;
+      if (!MusicFilter.isSongLike(track)) continue;
+      if (!seen.add(MusicFilter.titleKey(track.title))) continue;
+      related.add(track);
+    }
+    related.shuffle();
 
     final tracks = <Track>[
       seed,

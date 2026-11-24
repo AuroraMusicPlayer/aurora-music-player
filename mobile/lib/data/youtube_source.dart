@@ -1,6 +1,7 @@
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'models.dart';
+import 'music_filter.dart';
 import 'youtube_api.dart';
 
 /// A playable audio URL plus what we know about it.
@@ -108,14 +109,20 @@ class YouTubeSource {
       final tracks = <Track>[];
       for (final video in results) {
         final track = _toTrack(video);
-        final dedupeKey = '${track.title.toLowerCase()}|${track.artist.toLowerCase()}';
+        // "Emmène-moi", "Emmene moi" and "Emmène-moi (Remastered)" are one song.
+        final dedupeKey =
+            '${MusicFilter.titleKey(track.title)}|${track.artist.toLowerCase()}';
         if (!seen.add(dedupeKey)) continue;
         tracks.add(track);
         if (tracks.length >= limit) break;
       }
 
-      _searches[key] = _CachedSearch(DateTime.now(), tracks);
-      return tracks;
+      // Every caller gets music only. Filtering here, rather than at each call
+      // site, is what stops a stray documentary entering a queue through a
+      // path nobody remembered to guard.
+      final songs = MusicFilter.songsOnly(tracks);
+      _searches[key] = _CachedSearch(DateTime.now(), songs);
+      return songs;
     } catch (error) {
       throw _translate(error);
     }
