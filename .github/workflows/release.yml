@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to create (e.g. v0.1.0)'
+        description: 'Release tag to create (e.g. v0.15.0)'
         required: true
-        default: 'v0.1.0'
+        default: 'v0.15.0'
       android:
         description: 'Build the Android APK'
         type: boolean
@@ -17,12 +17,31 @@ on:
         description: 'Build the unsigned iOS IPA'
         type: boolean
         default: true
+      macos:
+        description: 'Build the macOS app'
+        type: boolean
+        default: true
+      pwa:
+        description: 'Build the installable web app'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
 env:
   FLUTTER_VERSION: '3.50.1'
+  RELEASE_NOTES: |
+    Aurora Music — personal build.
+
+    | Platform | File | Notes |
+    | --- | --- | --- |
+    | Android | `*.apk` | Enable "install unknown apps", then open it |
+    | iOS | `*.ipa` | Unsigned: re-sign with AltStore / SideStore / Sideloadly |
+    | macOS | `*.zip` | Unzip, right-click → Open the first time |
+    | Web | `pwa.zip` | Static build: serve over HTTPS, then install |
+
+    Everything runs on the device. No server, no account required.
 
 jobs:
   android:
@@ -45,37 +64,29 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Dependencies
-        run: flutter pub get
-
-      - name: Tests
-        run: flutter test
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
 
       - name: Build APK
         run: flutter build apk --release --target-platform android-arm64
 
-      - name: Rename artifact
+      - name: Rename
+        working-directory: mobile
         run: |
-          mkdir -p dist-out
+          mkdir -p out
           cp build/app/outputs/flutter-apk/app-release.apk \
-             dist-out/aurora-music-${TAG}-arm64.apk
+             "out/aurora-music-${TAG}-arm64.apk"
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
 
-      - name: Attach to release
+      - name: Attach
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: Aurora Music ${{ inputs.tag || github.ref_name }}
-          body: |
-            Aurora Music — personal build.
-
-            **Android** (`*.apk`): enable "install unknown apps" and open the file.
-            **iOS** (`*-unsigned.ipa`): unsigned by definition — re-sign with
-            AltStore, SideStore or Sideloadly using your own Apple ID.
-
-            Everything runs on the device: no server, no account.
-          files: mobile/dist-out/*.apk
+          body: ${{ env.RELEASE_NOTES }}
+          files: mobile/out/*.apk
           fail_on_unmatched_files: true
 
   ios:
@@ -93,34 +104,101 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Dependencies
-        run: flutter pub get
+      - run: flutter pub get
 
-      - name: Build (unsigned)
+      - name: Build (no codesign)
         run: flutter build ios --release --no-codesign
 
       - name: Package unsigned IPA
         run: |
-          cd build/ios/iphoneos
-          mkdir -p Payload
-          cp -R Runner.app Payload/
-          zip -qry "$GITHUB_WORKSPACE/mobile/dist-out/aurora-music-${TAG}-unsigned.ipa" Payload
-          ls -lh "$GITHUB_WORKSPACE/mobile/dist-out/"
+          mkdir -p out Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry "out/aurora-music-${TAG}-unsigned.ipa" Payload
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
 
-      - name: Attach to release
+      - name: Attach
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: Aurora Music ${{ inputs.tag || github.ref_name }}
-          body: |
-            Aurora Music — personal build.
+          body: ${{ env.RELEASE_NOTES }}
+          files: mobile/out/*.ipa
+          fail_on_unmatched_files: true
 
-            **Android** (`*.apk`): enable "install unknown apps" and open the file.
-            **iOS** (`*-unsigned.ipa`): unsigned by definition — re-sign with
-            AltStore, SideStore or Sideloadly using your own Apple ID.
+  macos:
+    if: github.event_name == 'push' || inputs.macos
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
 
-            Everything runs on the device: no server, no account.
-          files: mobile/dist-out/*.ipa
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Zip app
+        run: |
+          mkdir -p out
+          cd build/macos/Build/Products/Release
+          ditto -c -k --sequesterRsrc --keepParent aurora_music.app \
+            "../../../../../out/aurora-music-${TAG}-macos.zip"
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+
+      - name: Attach
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Aurora Music ${{ inputs.tag || github.ref_name }}
+          body: ${{ env.RELEASE_NOTES }}
+          files: mobile/out/*.zip
+          fail_on_unmatched_files: true
+
+  pwa:
+    if: github.event_name == 'push' || inputs.pwa
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci || npm install
+      - run: npm run build
+
+      - name: Package static build
+        run: |
+          mkdir -p out
+          cp -R .output/public/. out/
+          cat > out/DEPLOY.txt <<'TXT'
+          Aurora Music — installable web app.
+
+          Serve this folder over HTTPS, then install:
+            Android/Chrome: "Install" in the app, or browser menu
+            iPhone/Safari:  Share → Add to Home Screen
+
+          Local test: npx serve .
+          The service worker only registers on https or localhost.
+          TXT
+          cd out && zip -qry "../aurora-music-pwa-${TAG}.zip" .
+
+      - name: Attach
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Aurora Music ${{ inputs.tag || github.ref_name }}
+          body: ${{ env.RELEASE_NOTES }}
+          files: aurora-music-pwa-*.zip
           fail_on_unmatched_files: true
