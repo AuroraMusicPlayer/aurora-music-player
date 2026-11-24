@@ -92,6 +92,12 @@ class GoogleAccount {
         '--dart-define-from-file=google.json.';
   }
 
+  /// Null on Android, where [googleClientId] belongs to the iOS OAuth client.
+  String? get _clientId {
+    if (defaultTargetPlatform == TargetPlatform.android) return null;
+    return googleClientId.isEmpty ? null : googleClientId;
+  }
+
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
     if (!isConfigured) {
@@ -101,9 +107,11 @@ class GoogleAccount {
       );
     }
     await GoogleSignIn.instance.initialize(
-      // iOS uses the iOS client id directly; Android matches its package +
-      // SHA-1 through the Android client and needs the web client as server.
-      clientId: googleClientId.isEmpty ? null : googleClientId,
+      // Platform-specific on purpose. iOS uses its own OAuth client id, while
+      // Android identifies the app by package name + SHA-1 and only accepts the
+      // Web client as the server client. Handing Android the iOS id is one
+      // documented cause of ApiException 10 (DEVELOPER_ERROR).
+      clientId: _clientId,
       serverClientId:
           googleServerClientId.isEmpty ? null : googleServerClientId,
     );
