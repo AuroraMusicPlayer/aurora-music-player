@@ -59,7 +59,17 @@ class YouTubeSync {
     final result = SyncResult();
 
     onStatus?.call('Reading liked songs from YouTube…');
-    final remoteLiked = await reader.likedTracks();
+    final likedAt = <String, DateTime>{};
+    final remoteLiked = await reader.likedTracks(likedAt: likedAt);
+
+    // Keep the local copy of "liked in YouTube Music" so Home can show it
+    // without a network call, and stamp when it was last refreshed.
+    final now = DateTime.now().toUtc();
+    for (final track in remoteLiked) {
+      final stamp = likedAt[track.id] ?? now;
+      await library.setSyncValue('youtube_like', track.id, stamp.toIso8601String());
+    }
+    await library.setSyncValue('youtube_like_sync', 'fetched_at', now.toIso8601String());
 
     onStatus?.call('Comparing likes…');
     final localLiked = await library.favorites(limit: 2000);

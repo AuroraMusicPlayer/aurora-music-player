@@ -2,46 +2,32 @@ import 'models.dart';
 
 /// Decides when a track earns a permanent copy on the device.
 ///
-/// The rule is deliberately simple enough to explain in the UI:
+/// One rule, deliberately: **finish the song**. A track is saved once playback
+/// passes [percent] of its length. Repeating a song you never finish no longer
+/// saves it — play counts still drive ranking and stats, they just stop
+/// triggering downloads.
 ///
-///   plays − early skips ≥ threshold
-///
-/// Skips count against a track, so a song you keep rejecting never takes up
-/// space no matter how many times it lands in a queue by accident.
+/// Favourites are the exception: hearting something is explicit intent.
 class AutoCachePolicy {
   const AutoCachePolicy({
     this.enabled = true,
-    required this.threshold,
+    this.percent = 80,
     this.maxDuration = const Duration(minutes: 20),
   });
 
   final bool enabled;
-  final int threshold;
 
-  /// Podcast-length uploads would eat the whole budget, so they need to be
-  /// cached by hand.
+  /// How much of a track counts as "listened": 50–100.
+  final int percent;
+
+  /// Podcast-length uploads need a manual save, or one file eats the budget.
   final Duration maxDuration;
+
+  /// Fraction of the track that must play before it is saved.
+  double get fraction => percent.clamp(50, 100) / 100;
 
   bool shouldCache(Track track) {
     if (track.isCached) return false;
-
-    // Favourites are explicit intent; cache them even if auto-cache is off.
-    if (track.favorite) return true;
-    if (!enabled) return false;
-    if (track.affinity < threshold) return false;
-
-    final seconds = track.duration;
-    if (seconds != null && seconds > maxDuration.inSeconds) return false;
-    return true;
-  }
-
-  /// The second way a track earns its place, closer to how YouTube Music
-  /// behaves: if you listen to almost all of it, one listen is enough.
-  ///
-  /// Play-count thresholding rewards repetition; this rewards intent. A track
-  /// you sat through once is something you wanted to hear.
-  bool shouldCacheOnLongListen(Track track) {
-    if (track.isCached) return false;
     if (track.favorite) return true;
     if (!enabled) return false;
 
@@ -50,9 +36,16 @@ class AutoCachePolicy {
     return true;
   }
 
-  /// A play only counts once playback reaches the shorter of 30s or half the
-  /// track, the same convention streaming apps use. Anything switched away
-  /// from before that is a skip.
+  /// Playback deadline for the "long listen" check. Kept for the UI, which shows
+  /// nothing about it, and for tests.
+  Duration cachePoint(Track track) {
+    final length = track.length;
+    if (length == null) return Duration.zero;
+    return Duration(milliseconds: (length.inMilliseconds * fraction).round());
+  }
+
+  /// A play counts once playback reaches the shorter of 30s or half the track,
+  /// the convention streaming apps use. Skipping before that is a skip.
   static Duration qualifiedAfter(Track track) {
     const thirty = Duration(seconds: 30);
     final length = track.length;

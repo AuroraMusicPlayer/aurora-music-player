@@ -60,7 +60,11 @@ class YouTubeLibrary {
   }
 
   /// Liked videos, newest first.
-  Future<List<Track>> likedTracks() async {
+  ///
+  /// YouTube does not say *when* a video was liked, so [likedAt] is filled with
+  /// each video's own publish date: stable across runs and enough to order the
+  /// "From your YouTube" shelf.
+  Future<List<Track>> likedTracks({Map<String, DateTime>? likedAt}) async {
     final tracks = <Track>[];
     String? pageToken;
 
@@ -78,6 +82,8 @@ class YouTubeLibrary {
         final snippet = item['snippet'];
         if (id == null || snippet is! Map) continue;
         tracks.add(_trackFrom(id, snippet));
+        final published = DateTime.tryParse('${snippet['publishedAt'] ?? ''}');
+        if (likedAt != null && published != null) likedAt[id] = published;
       }
 
       pageToken = body['nextPageToken']?.toString();

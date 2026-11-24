@@ -32,6 +32,7 @@ class _HomeTabState extends State<HomeTab> {
   Duration _continueAt = Duration.zero;
   List<Track> _quickPicks = const [];
   DateTime? _channelsLoadedAt;
+  List<Track> _youtubeLikes = const [];
 
   /// Rebuilding the feed costs YouTube searches, and Google blocks devices
   /// that ask too often. Recompute at most this often; pull-to-refresh always
@@ -99,6 +100,7 @@ class _HomeTabState extends State<HomeTab> {
       // Signed-in accounts also get their own channels; this costs a handful of
       // quota units, so it is cached for an hour.
       unawaited(_loadChannels(result));
+      unawaited(_loadYoutubeLikes());
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '$error');
@@ -145,6 +147,68 @@ class _HomeTabState extends State<HomeTab> {
     } finally {
       reader?.dispose();
     }
+  }
+
+  /// The songs you liked in YouTube Music, straight on to Home.
+  ///
+  /// YouTube exposes neither listening history nor its recommender, so this is
+  /// the strongest signal available: your real likes, newest first. The local
+  /// copy renders immediately; it is refreshed at most every six hours.
+  Future<void> _loadYoutubeLikes() async {
+    final services = widget.services;
+    if (!services.google.isConfigured || services.google.user == null) return;
+
+    final stored = await services.library.youtubeLikes();
+    if (stored.isNotEmpty && mounted) {
+      setState(() => _youtubeLikes = _freshOnly(stored));
+    }
+
+    const ttl = Duration(hours: 6);
+    final fetchedAt = DateTime.tryParse(
+      await services.library.syncValue('youtube_like_sync', 'fetched_at') ?? '',
+    );
+    if (fetchedAt != null &&
+        DateTime.now().toUtc().difference(fetchedAt) < ttl) {
+      return;
+    }
+
+    YouTubeLibrary? reader;
+    try {
+      reader = YouTubeLibrary(services.google);
+      final likedAt = <String, DateTime>{};
+      final tracks = await reader.likedTracks(likedAt: likedAt);
+      if (tracks.isEmpty) return;
+
+      final now = DateTime.now().toUtc();
+      for (final track in tracks) {
+        await services.library.remember(track);
+        await services.library.setSyncValue(
+          'youtube_like',
+          track.id,
+          (likedAt[track.id] ?? now).toIso8601String(),
+        );
+      }
+      await services.library
+          .setSyncValue('youtube_like_sync', 'fetched_at', now.toIso8601String());
+
+      final refreshed = await services.library.youtubeLikes();
+      if (!mounted) return;
+      setState(() => _youtubeLikes = _freshOnly(refreshed));
+    } catch (_) {
+      // A bonus shelf: a failed lookup must never disturb the feed.
+    } finally {
+      reader?.dispose();
+    }
+  }
+
+  /// Anything played today already shows up in "Listen again"; the shelf is
+  /// meant to add to that list, not repeat it.
+  List<Track> _freshOnly(List<Track> tracks) {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    return tracks
+        .where((t) => t.lastPlayed == null || t.lastPlayed!.isBefore(cutoff))
+        .take(12)
+        .toList(growable: false);
   }
 
   void _play(List<Track> tracks, int index) {
@@ -239,30 +303,44 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
-          const SizedBox(height: 32),
+          if (_youtubeLikes.isNotEmpty)
+            ShelfView(
+              shelf: HomeShelf(
+                title: 'From your YouTube',
+                subtitle: 'What you liked in YouTube Music',
+                tracks: _youtubeLikes,
+              ),
+              onPlay: _play,
+            )
+          else ...[
+            const SizedBox(height: 32),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                children: [
+                  Icon(Icons.graphic_eq,
+                      size: 44, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(height: 14),
+                  const Text('Nothing here yet',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Search for a few songs you like. This screen then fills with '
+                    'your rotation, quick picks and mixes built from those artists.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              children: [
-                Icon(Icons.graphic_eq,
-                    size: 44, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(height: 14),
-                const Text('Nothing here yet',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                const SizedBox(height: 8),
-                const Text(
-                  'Search for a few songs you like. This screen then fills with '
-                  'your rotation, quick picks and mixes built from those artists.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
-                ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: widget.onOpenSearch,
-                  icon: const Icon(Icons.search),
-                  label: const Text('Search music'),
-                ),
-              ],
+            child: FilledButton.icon(
+              onPressed: widget.onOpenSearch,
+              icon: const Icon(Icons.search),
+              label: const Text('Search music'),
             ),
           ),
         ],
@@ -277,6 +355,12 @@ class _HomeTabState extends State<HomeTab> {
     _quickPicks = source.take(6).toList(growable: false);
 
     final shelves = <HomeShelf>[
+      if (_youtubeLikes.isNotEmpty)
+        HomeShelf(
+          title: 'From your YouTube',
+          subtitle: 'What you liked in YouTube Music',
+          tracks: _youtubeLikes,
+        ),
       if (feed.recent.isNotEmpty)
         HomeShelf(title: 'Listen again', subtitle: 'Picked up where you left off', tracks: feed.recent),
       ...feed.shelves,

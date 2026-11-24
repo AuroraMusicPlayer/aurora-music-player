@@ -618,7 +618,7 @@ class _CacheRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final needs = services.settings.autoCacheThreshold;
+    final percent = services.settings.autoCachePercent;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -637,8 +637,8 @@ class _CacheRow extends StatelessWidget {
                   ? (track.cacheOrigin == 'auto'
                       ? 'Saved automatically'
                       : 'Saved on this device')
-                  : 'Played ${track.playCount}× · auto-saves after $needs plays '
-                      'or one full listen',
+                  : 'Played ${track.playCount}× · auto-saves after $percent% '
+                      'of a listen',
               style: const TextStyle(fontSize: 11, color: Colors.white54),
             ),
           ),

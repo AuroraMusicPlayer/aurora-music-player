@@ -171,22 +171,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const _SectionHeader('Automatic caching'),
               SwitchListTile(
-                title: const Text('Save tracks I replay'),
+                title: const Text('Save tracks I listen to'),
                 subtitle: Text(
-                  'Saves a track when you replay it '
-                  '${settings.autoCacheThreshold}× — or when you listen almost all '
-                  'the way through it once.',
+                  'Saves a track once you have played '
+                  '${settings.autoCachePercent}% of it. Hearing it twice does not '
+                  'count — finishing it does. Songs you like are always kept.',
                 ),
                 value: settings.autoCacheEnabled,
                 onChanged: (value) => settings.autoCacheEnabled = value,
               ),
               _StepperTile(
-                title: 'Plays before saving',
-                subtitle: 'A play counts after 30 seconds, or half the track if shorter.',
-                value: settings.autoCacheThreshold,
-                min: 1,
-                max: 10,
-                onChanged: (value) => settings.autoCacheThreshold = value,
+                title: 'Listen-through before saving',
+                subtitle: 'Percentage of the track that must play.',
+                value: settings.autoCachePercent,
+                min: 50,
+                max: 100,
+                step: 5,
+                suffix: '%',
+                onChanged: (value) => settings.autoCachePercent = value,
               ),
               SwitchListTile(
                 title: const Text('Only on Wi-Fi'),
@@ -268,6 +270,7 @@ class _StepperTile extends StatelessWidget {
     required this.min,
     required this.max,
     required this.onChanged,
+    this.step = 1,
     this.suffix = '',
   });
 
@@ -276,8 +279,12 @@ class _StepperTile extends StatelessWidget {
   final int value;
   final int min;
   final int max;
+  final int step;
   final String suffix;
   final ValueChanged<int> onChanged;
+
+  int _next() => (value + step).clamp(min, max);
+  int _previous() => (value - step).clamp(min, max);
 
   @override
   Widget build(BuildContext context) {
@@ -289,12 +296,12 @@ class _StepperTile extends StatelessWidget {
         children: [
           IconButton(
             icon: const Icon(Icons.remove_circle_outline),
-            onPressed: value <= min ? null : () => onChanged(value - 1),
+            onPressed: value <= min ? null : () => onChanged(_previous()),
           ),
           Text('$value$suffix', style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
-            onPressed: value >= max ? null : () => onChanged(value + 1),
+            onPressed: value >= max ? null : () => onChanged(_next()),
           ),
         ],
       ),

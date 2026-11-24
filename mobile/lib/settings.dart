@@ -10,7 +10,7 @@ class Settings extends ChangeNotifier {
   final SharedPreferences _prefs;
 
   static const _kAutoCache = 'auto_cache';
-  static const _kThreshold = 'auto_cache_threshold';
+  static const _kPercent = 'auto_cache_percent';
   static const _kWifiOnly = 'auto_cache_wifi_only';
   static const _kBudgetGb = 'cache_budget_gb';
   static const _kPullOnly = 'youtube_pull_only';
@@ -23,11 +23,13 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Qualified plays required before a track is kept offline automatically.
-  int get autoCacheThreshold => _prefs.getInt(_kThreshold) ?? 2;
+  /// How much of a track must play before it is saved automatically.
+  ///
+  /// Listening twice no longer triggers a download; finishing the song does.
+  int get autoCachePercent => _prefs.getInt(_kPercent) ?? 80;
 
-  set autoCacheThreshold(int value) {
-    _prefs.setInt(_kThreshold, value.clamp(1, 10));
+  set autoCachePercent(int value) {
+    _prefs.setInt(_kPercent, value.clamp(50, 100));
     notifyListeners();
   }
 

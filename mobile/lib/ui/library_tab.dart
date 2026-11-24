@@ -149,8 +149,8 @@ class _LibraryTabState extends State<LibraryTab> {
                 services: services,
                 title: 'Offline songs',
                 showHeart: true,
-                emptyMessage: 'Songs you play twice, or listen through once, '
-                    'are saved here automatically. They play with no network.',
+                emptyMessage: 'Songs you listen through are saved here '
+                    'automatically. They play with no network.',
                 load: () => services.library.offline(origin: 'auto'),
                 onLongPress: (track) async {
                   await services.cache.remove(track);

@@ -101,7 +101,7 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
 
   AutoCachePolicy get policy => AutoCachePolicy(
         enabled: settings.autoCacheEnabled,
-        threshold: settings.autoCacheThreshold,
+        percent: settings.autoCachePercent,
       );
 
   final AudioPlayer _player = AudioPlayer();
@@ -606,12 +606,12 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     if (!_activeStarted && position > const Duration(seconds: 1)) {
       _activeStarted = true;
     }
-    // "Played right through" is a stronger signal than "tapped twice".
+    // The only automatic trigger: actually finishing the track.
     if (!_longListenHandled && track.duration != null && track.duration! > 0) {
       final fraction = position.inSeconds / track.duration!;
-      if (fraction >= 0.8) {
+      if (fraction >= policy.fraction) {
         _longListenHandled = true;
-        _maybeAutoCache(track, longListen: true);
+        _maybeAutoCache(track);
       }
     }
 
@@ -631,10 +631,10 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
   }
 
   Future<void> _countQualifiedPlay(Track track) async {
+    // Counted for ranking and stats only; saving is driven by finishing a song.
     await library.recordPlay(track.id);
     events.bump();
     await _refreshActive();
-    await _maybeAutoCache(track);
   }
 
   Future<void> _syncHomeWidget() async {
@@ -673,12 +673,11 @@ class AuroraAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler
     }
   }
 
-  /// This is the feature: repeated listening earns an offline copy.
-  Future<void> _maybeAutoCache(Track track, {bool longListen = false}) async {
+  /// The feature: listening a track through earns it an offline copy. Repeat
+  /// plays are counted for ranking only and do not trigger a download.
+  Future<void> _maybeAutoCache(Track track) async {
     final fresh = await library.byId(track.id) ?? track;
-    final wanted =
-        longListen ? policy.shouldCacheOnLongListen(fresh) : policy.shouldCache(fresh);
-    if (!wanted) return;
+    if (!policy.shouldCache(fresh)) return;
 
     unawaited(
       cache.download(fresh, origin: fresh.favorite ? 'manual' : 'auto').then((updated) {

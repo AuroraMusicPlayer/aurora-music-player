@@ -49,4 +49,3 @@ app.*.map.json
 
 # Google OAuth config (per-developer)
 google.json
-google-public.json

@@ -411,6 +411,21 @@ class Library {
     );
   }
 
+  /// Songs liked in YouTube Music, most recent first.
+  ///
+  /// Rows are written by the sync, so this is a local read: opening Home never
+  /// waits on the network for the shelf to appear.
+  Future<List<Track>> youtubeLikes({int limit = 40}) async {
+    final rows = await _db.rawQuery('''
+      SELECT t.* FROM sync_state s
+      JOIN tracks t ON t.id = s.key
+      WHERE s.kind = 'youtube_like'
+      ORDER BY s.value DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows.map(Track.fromRow).toList(growable: false);
+  }
+
   Future<int> createPlaylist(String name) async {
     return _db.insert('playlists', {
       'name': name.trim(),

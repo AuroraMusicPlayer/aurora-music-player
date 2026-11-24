@@ -1,0 +1,7 @@
+{
+  "_comment": "Public OAuth client identifiers. Not secrets: Google protects these by package name + SHA-1 / bundle id. No API key belongs here.",
+  "GOOGLE_ANDROID_CLIENT_ID": "790541594186-7qt7jcrn7137l25b4ruj3pa63igf985b.apps.googleusercontent.com",
+  "GOOGLE_CLIENT_ID": "790541594186-jvnv26ush3r8tdd70lk5er14lgb9cv4n.apps.googleusercontent.com",
+  "GOOGLE_SERVER_CLIENT_ID": "790541594186-7hbf2m1hjisd0drajk16520vhql9t6v3.apps.googleusercontent.com",
+  "YOUTUBE_API_KEY": ""
+}

@@ -40,68 +40,62 @@ void main() {
     });
   });
 
-  group('long listen', () {
-    test('one near-complete listen is enough, even with no repeats', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCacheOnLongListen(track(plays: 0)), isTrue);
+  group('listen-through point', () {
+    test('defaults to 80% of the track', () {
+      const policy = AutoCachePolicy();
+      expect(policy.percent, 80);
+      expect(policy.cachePoint(track(duration: 200)),
+          const Duration(seconds: 160));
     });
 
-    test('respects the auto-cache switch', () {
-      const policy = AutoCachePolicy(enabled: false, threshold: 2);
-      expect(policy.shouldCacheOnLongListen(track(plays: 0)), isFalse);
-      expect(policy.shouldCacheOnLongListen(track(favorite: true)), isTrue);
+    test('is configurable', () {
+      const policy = AutoCachePolicy(percent: 75);
+      expect(policy.cachePoint(track(duration: 200)),
+          const Duration(seconds: 150));
     });
 
-    test('never re-caches something already cached', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCacheOnLongListen(track(audioPath: '/x.mp4')), isFalse);
+    test('stays inside 50–100%', () {
+      expect(const AutoCachePolicy(percent: 10).fraction, 0.5);
+      expect(const AutoCachePolicy(percent: 500).fraction, 1.0);
     });
 
-    test('long uploads still need a manual save', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(
-        policy.shouldCacheOnLongListen(track(duration: 45 * 60)),
-        isFalse,
-      );
+    test('unknown duration never reaches the point', () {
+      expect(const AutoCachePolicy().cachePoint(track(duration: null)),
+          Duration.zero);
     });
   });
 
-  group('auto cache decision', () {
-    test('does nothing before the threshold', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCache(track(plays: 1)), isFalse);
+  group('saving a track', () {
+    test('one listen is enough, no repeat required', () {
+      const policy = AutoCachePolicy();
+      expect(policy.shouldCache(track(plays: 0)), isTrue);
     });
 
-    test('caches once the threshold is reached', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCache(track(plays: 2)), isTrue);
+    test('replaying a song does not change the decision', () {
+      const policy = AutoCachePolicy();
+      expect(policy.shouldCache(track(plays: 1)), isTrue);
+      expect(policy.shouldCache(track(plays: 9)), isTrue);
     });
 
-    test('early skips cancel plays out', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCache(track(plays: 3, skips: 2)), isFalse);
-      expect(policy.shouldCache(track(plays: 4, skips: 2)), isTrue);
+    test('skips are irrelevant, only finishing matters', () {
+      const policy = AutoCachePolicy();
+      expect(policy.shouldCache(track(plays: 3, skips: 3)), isTrue);
     });
 
-    test('already cached tracks are left alone', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCache(track(plays: 9, audioPath: '/audio/x.m4a')), isFalse);
+    test('respects the auto-cache switch', () {
+      const policy = AutoCachePolicy(enabled: false);
+      expect(policy.shouldCache(track()), isFalse);
+      expect(policy.shouldCache(track(favorite: true)), isTrue);
     });
 
-    test('favourites are cached even when auto-cache is off', () {
-      const policy = AutoCachePolicy(enabled: false, threshold: 2);
-      expect(policy.shouldCache(track(plays: 0, favorite: true)), isTrue);
-      expect(policy.shouldCache(track(plays: 9)), isFalse);
+    test('never re-caches something already cached', () {
+      const policy = AutoCachePolicy();
+      expect(policy.shouldCache(track(audioPath: '/audio/x.m4a')), isFalse);
     });
 
     test('podcast-length uploads need a manual save', () {
-      const policy = AutoCachePolicy(threshold: 2);
-      expect(policy.shouldCache(track(plays: 5, duration: 45 * 60)), isFalse);
-    });
-
-    test('threshold is configurable', () {
-      expect(const AutoCachePolicy(threshold: 3).shouldCache(track(plays: 2)), isFalse);
-      expect(const AutoCachePolicy(threshold: 3).shouldCache(track(plays: 3)), isTrue);
+      const policy = AutoCachePolicy();
+      expect(policy.shouldCache(track(duration: 45 * 60)), isFalse);
     });
   });
 }
