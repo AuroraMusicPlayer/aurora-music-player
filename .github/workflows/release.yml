@@ -70,6 +70,7 @@ jobs:
 
       - name: Build APK
         run: flutter build apk --release --target-platform android-arm64
+          --dart-define-from-file=google-public.json
           --dart-define=APP_VERSION=${{ inputs.tag || github.ref_name }}
 
       - name: Rename
@@ -109,6 +110,7 @@ jobs:
 
       - name: Build (no codesign)
         run: flutter build ios --release --no-codesign
+          --dart-define-from-file=google-public.json
           --dart-define=APP_VERSION=${{ inputs.tag || github.ref_name }}
 
       - name: Package unsigned IPA
@@ -147,6 +149,7 @@ jobs:
 
       - name: Build macOS
         run: flutter build macos --release
+          --dart-define-from-file=google-public.json
           --dart-define=APP_VERSION=${{ inputs.tag || github.ref_name }}
 
       - name: Zip app

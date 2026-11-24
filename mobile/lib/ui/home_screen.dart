@@ -28,6 +28,52 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     widget.services.handler.error.addListener(_showError);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptGoogle());
+  }
+
+  /// One-time invitation to connect Google. Shown only when the build actually
+  /// has OAuth credentials, so it never dangles in front of a non-working flow.
+  Future<void> _maybePromptGoogle() async {
+    final services = widget.services;
+    if (services.settings.googlePromptShown) return;
+    if (!services.google.isConfigured || services.google.user != null) return;
+
+    await services.settings.markGooglePromptShown();
+    if (!mounted) return;
+
+    final connect = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Connect your Google account?'),
+        content: const Text(
+          'Aurora can import your YouTube playlists and liked songs, and keep '
+          'them in sync in both directions.\n\n'
+          'It is optional: everything else works without it, and you can '
+          'connect later from Settings.',
+          style: TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+
+    if (connect != true) return;
+    try {
+      await services.google.signIn();
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$error')));
+    }
   }
 
   @override

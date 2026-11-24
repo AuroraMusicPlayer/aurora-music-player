@@ -14,6 +14,7 @@ class Settings extends ChangeNotifier {
   static const _kWifiOnly = 'auto_cache_wifi_only';
   static const _kBudgetGb = 'cache_budget_gb';
   static const _kPullOnly = 'youtube_pull_only';
+  static const _kGooglePrompt = 'google_prompt_shown';
 
   bool get autoCacheEnabled => _prefs.getBool(_kAutoCache) ?? true;
 
@@ -48,6 +49,14 @@ class Settings extends ChangeNotifier {
 
   /// When on, sync only reads from YouTube: nothing is ever written back.
   /// Protects the account and the quota when the app is shared.
+  /// The sign-in invitation is shown once, not on every launch.
+  bool get googlePromptShown => _prefs.getBool(_kGooglePrompt) ?? false;
+
+  Future<void> markGooglePromptShown() async {
+    await _prefs.setBool(_kGooglePrompt, true);
+    notifyListeners();
+  }
+
   bool get youtubePullOnly => _prefs.getBool(_kPullOnly) ?? false;
 
   set youtubePullOnly(bool value) {
