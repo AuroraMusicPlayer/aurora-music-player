@@ -68,6 +68,26 @@ jobs:
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
 
+      - name: Release signing key
+        working-directory: mobile/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No signing key in secrets; the build will use the debug key."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > aurora-release.jks
+          cat > key.properties <<EOF
+          storeFile=aurora-release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
       - name: Build APK
         run: flutter build apk --release --target-platform android-arm64
           --dart-define-from-file=google-public.json
